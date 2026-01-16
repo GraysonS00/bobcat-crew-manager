@@ -550,7 +550,7 @@ const EmployeesView = ({ employees, onRefresh, readOnly = false }) => {
     }
   }
 
-  const classifications = ['Foreman', 'Skilled Labor', 'General Labor', 'Operator']
+  const classifications = ['Foreman', 'Skilled Labor', 'General Labor', 'Operator', 'Welder', 'Truck Driver']
 
   return (
     <div className="space-y-6">
