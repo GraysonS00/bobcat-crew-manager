@@ -1513,12 +1513,16 @@ const ForemanLeakReportsView = ({ leakReports, crews, profile, onRefresh }) => {
   const updateDowntimePeriod = (index, field, value) => setFormData(prev => ({ ...prev, downtime_periods: prev.downtime_periods.map((p, i) => i === index ? { ...p, [field]: value } : p) }))
   const removeDowntimePeriod = (index) => setFormData(prev => ({ ...prev, downtime_periods: prev.downtime_periods.filter((_, i) => i !== index) }))
 
-  const handleSubmit = async () => {
+const handleSubmit = async () => {
     setLoading(true)
     const submitData = { ...formData, crew_id: userCrew?.id, submitted_by: profile.id, status: 'submitted',
       downtime_periods: JSON.stringify(formData.downtime_periods),
       bore_size_inches: formData.bore_size_inches ? parseFloat(formData.bore_size_inches) : null,
       bore_footage: formData.bore_footage ? parseFloat(formData.bore_footage) : null,
+      crew_start_time: formData.crew_start_time || null,
+      crew_end_time: formData.crew_end_time || null,
+      time_called_off_to_grade_1: formData.time_called_off_to_grade_1 || null,
+      time_leak_turned_grade_1: formData.time_leak_turned_grade_1 || null,
     }
     const { error } = await supabase.from('leak_reports').insert([submitData])
     if (!error) { setFormData(initialFormState); setShowAddModal(false); onRefresh() }
