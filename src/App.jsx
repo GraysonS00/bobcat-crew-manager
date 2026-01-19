@@ -1523,6 +1523,12 @@ const handleSubmit = async () => {
       crew_end_time: formData.crew_end_time || null,
       time_called_off_to_grade_1: formData.time_called_off_to_grade_1 || null,
       time_leak_turned_grade_1: formData.time_leak_turned_grade_1 || null,
+      leak_type: formData.leak_type || null,
+      pipe_type: formData.pipe_type || null,
+      welder_type: formData.welder_type || null,
+      bore_type: formData.bore_type || null,
+      soil_type: formData.soil_type || null,
+      rate_type: formData.rate_type || null,
     }
     const { error } = await supabase.from('leak_reports').insert([submitData])
     if (!error) { setFormData(initialFormState); setShowAddModal(false); onRefresh() }
