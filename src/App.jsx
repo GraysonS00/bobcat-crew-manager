@@ -6,7 +6,6 @@ import { supabase } from './supabaseClient'
 // =============================================
 
 const AuthContext = createContext({})
-
 export const useAuth = () => useContext(AuthContext)
 
 // =============================================
@@ -20,6 +19,7 @@ const Badge = ({ children, variant = 'default' }) => {
     warning: 'bg-amber-900/50 text-amber-400 border border-amber-700',
     danger: 'bg-red-900/50 text-red-400 border border-red-700',
     info: 'bg-sky-900/50 text-sky-400 border border-sky-700',
+    purple: 'bg-purple-900/50 text-purple-400 border border-purple-700',
   }
   return (
     <span className={`px-2 py-1 rounded text-xs font-medium ${variants[variant]}`}>
@@ -34,6 +34,7 @@ const Button = ({ children, onClick, variant = 'primary', size = 'md', disabled 
     secondary: 'bg-zinc-700 hover:bg-zinc-600 text-zinc-200',
     danger: 'bg-red-600 hover:bg-red-500 text-white',
     ghost: 'bg-transparent hover:bg-zinc-800 text-zinc-400',
+    success: 'bg-emerald-600 hover:bg-emerald-500 text-white font-semibold',
   }
   const sizes = {
     sm: 'px-3 py-1.5 text-sm',
@@ -65,7 +66,7 @@ const Card = ({ children, className = '' }) => (
   </div>
 )
 
-const Input = ({ label, type = 'text', value, onChange, placeholder, className = '', required = false }) => (
+const Input = ({ label, type = 'text', value, onChange, placeholder, className = '', required = false, disabled = false }) => (
   <div className={`flex flex-col gap-1.5 ${className}`}>
     {label && <label className="text-sm text-zinc-400 font-medium">{label}</label>}
     <input
@@ -74,18 +75,20 @@ const Input = ({ label, type = 'text', value, onChange, placeholder, className =
       onChange={onChange}
       placeholder={placeholder}
       required={required}
-      className="bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all"
+      disabled={disabled}
+      className={`bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
     />
   </div>
 )
 
-const Select = ({ label, value, onChange, options, className = '' }) => (
+const Select = ({ label, value, onChange, options, className = '', disabled = false }) => (
   <div className={`flex flex-col gap-1.5 ${className}`}>
     {label && <label className="text-sm text-zinc-400 font-medium">{label}</label>}
     <select
       value={value}
       onChange={onChange}
-      className="bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 text-zinc-100 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all"
+      disabled={disabled}
+      className={`bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 text-zinc-100 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
     >
       {options.map(opt => (
         <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -94,7 +97,7 @@ const Select = ({ label, value, onChange, options, className = '' }) => (
   </div>
 )
 
-const Textarea = ({ label, value, onChange, placeholder, rows = 3 }) => (
+const Textarea = ({ label, value, onChange, placeholder, rows = 3, disabled = false }) => (
   <div className="flex flex-col gap-1.5">
     {label && <label className="text-sm text-zinc-400 font-medium">{label}</label>}
     <textarea
@@ -102,12 +105,13 @@ const Textarea = ({ label, value, onChange, placeholder, rows = 3 }) => (
       onChange={onChange}
       placeholder={placeholder}
       rows={rows}
-      className="bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all resize-none"
+      disabled={disabled}
+      className={`bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all resize-none ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
     />
   </div>
 )
 
-const Toggle = ({ label, checked, onChange, description }) => (
+const Toggle = ({ label, checked, onChange, description, disabled = false }) => (
   <div className="flex items-center justify-between py-2">
     <div>
       <p className="text-zinc-200 font-medium">{label}</p>
@@ -115,29 +119,32 @@ const Toggle = ({ label, checked, onChange, description }) => (
     </div>
     <button
       type="button"
-      onClick={() => onChange(!checked)}
-      className={`relative w-12 h-7 rounded-full transition-colors ${checked ? 'bg-amber-500' : 'bg-zinc-700'}`}
+      onClick={() => !disabled && onChange(!checked)}
+      disabled={disabled}
+      className={`relative w-12 h-7 rounded-full transition-colors ${checked ? 'bg-amber-500' : 'bg-zinc-700'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
     >
       <div className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-transform ${checked ? 'translate-x-6' : 'translate-x-1'}`} />
     </button>
   </div>
 )
 
-const YesNoToggle = ({ label, value, onChange }) => (
+const YesNoToggle = ({ label, value, onChange, disabled = false }) => (
   <div className="flex items-center justify-between py-2 border-b border-zinc-800">
     <span className="text-zinc-300">{label}</span>
     <div className="flex gap-2">
       <button
         type="button"
-        onClick={() => onChange(true)}
-        className={`px-3 py-1 rounded text-sm font-medium transition-colors ${value === true ? 'bg-emerald-600 text-white' : 'bg-zinc-700 text-zinc-400'}`}
+        onClick={() => !disabled && onChange(true)}
+        disabled={disabled}
+        className={`px-3 py-1 rounded text-sm font-medium transition-colors ${value === true ? 'bg-emerald-600 text-white' : 'bg-zinc-700 text-zinc-400'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
       >
         YES
       </button>
       <button
         type="button"
-        onClick={() => onChange(false)}
-        className={`px-3 py-1 rounded text-sm font-medium transition-colors ${value === false ? 'bg-red-600 text-white' : 'bg-zinc-700 text-zinc-400'}`}
+        onClick={() => !disabled && onChange(false)}
+        disabled={disabled}
+        className={`px-3 py-1 rounded text-sm font-medium transition-colors ${value === false ? 'bg-red-600 text-white' : 'bg-zinc-700 text-zinc-400'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
       >
         NO
       </button>
@@ -145,24 +152,26 @@ const YesNoToggle = ({ label, value, onChange }) => (
   </div>
 )
 
-const TimeInput = ({ label, value, onChange }) => (
+const TimeInput = ({ label, value, onChange, disabled = false }) => (
   <div className="flex flex-col gap-1.5">
     {label && <label className="text-sm text-zinc-400 font-medium">{label}</label>}
     <input
       type="time"
       value={value || ''}
       onChange={(e) => onChange(e.target.value)}
-      className="bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 text-zinc-100 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all"
+      disabled={disabled}
+      className={`bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 text-zinc-100 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
     />
   </div>
 )
 
-const CheckboxWithQty = ({ label, checked, onCheckChange, qty, onQtyChange }) => (
+const CheckboxWithQty = ({ label, checked, onCheckChange, qty, onQtyChange, disabled = false }) => (
   <div className="flex items-center gap-3 py-2">
     <button
       type="button"
-      onClick={() => onCheckChange(!checked)}
-      className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-colors ${checked ? 'bg-amber-500 border-amber-500 text-zinc-900' : 'border-zinc-600'}`}
+      onClick={() => !disabled && onCheckChange(!checked)}
+      disabled={disabled}
+      className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-colors ${checked ? 'bg-amber-500 border-amber-500 text-zinc-900' : 'border-zinc-600'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
     >
       {checked && <Icons.Check />}
     </button>
@@ -173,6 +182,7 @@ const CheckboxWithQty = ({ label, checked, onCheckChange, qty, onQtyChange }) =>
         value={qty || ''}
         onChange={(e) => onQtyChange(parseInt(e.target.value) || 0)}
         placeholder="Qty"
+        disabled={disabled}
         className="w-20 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-zinc-100 text-sm"
       />
     )}
@@ -188,6 +198,22 @@ const LoadingScreen = () => (
       <p className="text-zinc-500">Loading...</p>
     </div>
   </div>
+)
+
+const TabButton = ({ active, onClick, children, count }) => (
+  <button
+    onClick={onClick}
+    className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+      active ? 'bg-amber-500 text-zinc-900' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+    }`}
+  >
+    {children}
+    {count !== undefined && (
+      <span className={`px-2 py-0.5 rounded-full text-xs ${active ? 'bg-zinc-900/30' : 'bg-zinc-700'}`}>
+        {count}
+      </span>
+    )}
+  </button>
 )
 
 // =============================================
@@ -260,6 +286,16 @@ const Icons = {
   Document: () => (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+    </svg>
+  ),
+  Clock: () => (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  ),
+  CheckCircle: () => (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
   ),
 }
@@ -348,9 +384,8 @@ const Navigation = ({ currentView, setCurrentView, profile, onLogout }) => {
     ],
     supervisor: [
       { id: 'dashboard', label: 'Dashboard', icon: Icons.Home },
-      { id: 'crews', label: 'All Crews', icon: Icons.Users },
-      { id: 'equipment', label: 'All Equipment', icon: Icons.Truck },
-      { id: 'leak-reports', label: 'Leak Reports', icon: Icons.Document },
+      { id: 'crews', label: 'My Crews', icon: Icons.Users },
+      { id: 'review-reports', label: 'Review Reports', icon: Icons.Document },
     ],
     foreman: [
       { id: 'dashboard', label: 'Dashboard', icon: Icons.Home },
@@ -416,7 +451,9 @@ const Navigation = ({ currentView, setCurrentView, profile, onLogout }) => {
 
 const Dashboard = ({ profile, crews, employees, equipment, leakReports }) => {
   const isForeman = profile?.role === 'foreman'
+  const isSupervisor = profile?.role === 'supervisor'
   const userCrew = isForeman ? crews.find(c => c.foreman_user_id === profile.id) : null
+  const supervisorCrews = isSupervisor ? crews.filter(c => c.supervisor_id === profile.id) : []
   
   const filteredEquipment = isForeman && userCrew 
     ? equipment.filter(e => e.crew_id === userCrew.id)
@@ -424,11 +461,131 @@ const Dashboard = ({ profile, crews, employees, equipment, leakReports }) => {
   
   const filteredReports = isForeman && userCrew
     ? leakReports.filter(r => r.crew_id === userCrew.id)
+    : isSupervisor 
+    ? leakReports.filter(r => supervisorCrews.some(c => c.id === r.crew_id))
     : leakReports
+
+  const pendingReports = filteredReports.filter(r => r.status === 'submitted')
+  const reviewedReports = filteredReports.filter(r => r.status === 'reviewed')
 
   const activeEmployees = employees.filter(e => e.active).length
   const equipmentInService = filteredEquipment.filter(e => e.status === 'In Service').length
   const outOfServiceCount = filteredEquipment.filter(e => e.status === 'Out of Service').length
+
+  if (isSupervisor) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-zinc-100">Supervisor Dashboard</h1>
+          <p className="text-zinc-500">Manage your crews and review reports</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card>
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-amber-500/10 rounded-xl flex items-center justify-center text-amber-400">
+                <Icons.Users />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-zinc-100">{supervisorCrews.length}</p>
+                <p className="text-sm text-zinc-500">Crews Under You</p>
+              </div>
+            </div>
+          </Card>
+
+          <Card className={pendingReports.length > 0 ? 'border-amber-700/50' : ''}>
+            <div className="flex items-center gap-4">
+              <div className={`w-12 h-12 ${pendingReports.length > 0 ? 'bg-amber-500/10' : 'bg-zinc-700/50'} rounded-xl flex items-center justify-center ${pendingReports.length > 0 ? 'text-amber-400' : 'text-zinc-500'}`}>
+                <Icons.Clock />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-zinc-100">{pendingReports.length}</p>
+                <p className="text-sm text-zinc-500">Pending Review</p>
+              </div>
+            </div>
+          </Card>
+
+          <Card>
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-400">
+                <Icons.CheckCircle />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-zinc-100">{reviewedReports.length}</p>
+                <p className="text-sm text-zinc-500">Reviewed</p>
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        {pendingReports.length > 0 && (
+          <Card className="border-amber-700/50 bg-amber-900/10">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 bg-amber-500/20 rounded-lg flex items-center justify-center text-amber-400 flex-shrink-0">
+                <Icons.Document />
+              </div>
+              <div>
+                <h3 className="font-semibold text-amber-400">Reports Need Review</h3>
+                <p className="text-sm text-zinc-400 mt-1">
+                  You have {pendingReports.length} leak report{pendingReports.length > 1 ? 's' : ''} waiting for review.
+                </p>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card>
+            <h2 className="text-lg font-semibold text-zinc-100 mb-4">Your Crews</h2>
+            <div className="space-y-3">
+              {supervisorCrews.map(crew => {
+                const foreman = employees.find(e => e.id === crew.foreman_id)
+                const crewPending = leakReports.filter(r => r.crew_id === crew.id && r.status === 'submitted').length
+                
+                return (
+                  <div key={crew.id} className="flex items-center justify-between p-3 bg-zinc-800/50 rounded-lg">
+                    <div>
+                      <p className="font-medium text-zinc-200">{crew.name}</p>
+                      <p className="text-sm text-zinc-500">Foreman: {foreman?.name || 'Not assigned'}</p>
+                    </div>
+                    {crewPending > 0 && (
+                      <Badge variant="warning">{crewPending} pending</Badge>
+                    )}
+                  </div>
+                )
+              })}
+              {supervisorCrews.length === 0 && (
+                <p className="text-zinc-500 text-center py-4">No crews assigned to you</p>
+              )}
+            </div>
+          </Card>
+
+          <Card>
+            <h2 className="text-lg font-semibold text-zinc-100 mb-4">Recent Submissions</h2>
+            <div className="space-y-3">
+              {pendingReports.slice(0, 5).map(report => {
+                const crew = crews.find(c => c.id === report.crew_id)
+                return (
+                  <div key={report.id} className="p-3 bg-zinc-800/50 rounded-lg">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="font-medium text-zinc-200">Leak #{report.leak_number || '-'}</p>
+                      <Badge variant="warning">Pending</Badge>
+                    </div>
+                    <p className="text-sm text-zinc-400">
+                      {crew?.name || 'Unknown'} • {report.date}
+                    </p>
+                  </div>
+                )
+              })}
+              {pendingReports.length === 0 && (
+                <p className="text-zinc-500 text-center py-4">No pending reports</p>
+              )}
+            </div>
+          </Card>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -553,10 +710,19 @@ const Dashboard = ({ profile, crews, employees, equipment, leakReports }) => {
                   <div key={report.id} className="p-3 bg-zinc-800/50 rounded-lg">
                     <div className="flex items-center justify-between mb-1">
                       <p className="font-medium text-zinc-200">Leak #{report.leak_number || '-'}</p>
-                      <span className="text-xs text-zinc-500">{report.date}</span>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={report.status === 'reviewed' ? 'success' : 'warning'}>
+                          {report.status === 'reviewed' ? 'Reviewed' : 'Pending'}
+                        </Badge>
+                        {report.rate_type && (
+                          <Badge variant={report.rate_type === 'all_hourly' ? 'info' : report.rate_type === 'unit_rates' ? 'purple' : 'default'}>
+                            {report.rate_type === 'all_hourly' ? 'Hourly' : report.rate_type === 'unit_rates' ? 'Unit' : 'Both'}
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                     <p className="text-sm text-zinc-400">
-                      {crew?.name || 'Unknown crew'} • {report.address || 'No address'}
+                      {crew?.name || 'Unknown crew'} • {report.date}
                     </p>
                   </div>
                 )
@@ -590,10 +756,7 @@ const EmployeesView = ({ employees, onRefresh, readOnly = false }) => {
 
   const handleAdd = async () => {
     setLoading(true)
-    const { error } = await supabase
-      .from('employees')
-      .insert([newEmployee])
-    
+    const { error } = await supabase.from('employees').insert([newEmployee])
     if (!error) {
       setNewEmployee({ name: '', classification: 'General Labor', phone: '', employee_number: '', active: true })
       setShowAddModal(false)
@@ -614,7 +777,6 @@ const EmployeesView = ({ employees, onRefresh, readOnly = false }) => {
         active: editingEmployee.active,
       })
       .eq('id', editingEmployee.id)
-    
     if (!error) {
       setEditingEmployee(null)
       onRefresh()
@@ -677,16 +839,10 @@ const EmployeesView = ({ employees, onRefresh, readOnly = false }) => {
                   {!readOnly && (
                     <td className="py-3 px-4 text-right">
                       <div className="flex justify-end gap-2">
-                        <button
-                          onClick={() => setEditingEmployee(emp)}
-                          className="p-2 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 rounded-lg transition-all"
-                        >
+                        <button onClick={() => setEditingEmployee(emp)} className="p-2 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 rounded-lg">
                           <Icons.Edit />
                         </button>
-                        <button
-                          onClick={() => handleDelete(emp.id)}
-                          className="p-2 text-zinc-400 hover:text-red-400 hover:bg-zinc-700 rounded-lg transition-all"
-                        >
+                        <button onClick={() => handleDelete(emp.id)} className="p-2 text-zinc-400 hover:text-red-400 hover:bg-zinc-700 rounded-lg">
                           <Icons.Trash />
                         </button>
                       </div>
@@ -696,96 +852,44 @@ const EmployeesView = ({ employees, onRefresh, readOnly = false }) => {
               ))}
             </tbody>
           </table>
-          {employees.length === 0 && (
-            <p className="text-zinc-500 text-center py-8">No employees added yet</p>
-          )}
+          {employees.length === 0 && <p className="text-zinc-500 text-center py-8">No employees added yet</p>}
         </div>
       </Card>
 
-      {/* Add Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <Card className="w-full max-w-md">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-zinc-100">Add Employee</h2>
-              <button onClick={() => setShowAddModal(false)} className="text-zinc-400 hover:text-zinc-200">
-                <Icons.X />
-              </button>
+              <button onClick={() => setShowAddModal(false)} className="text-zinc-400 hover:text-zinc-200"><Icons.X /></button>
             </div>
             <div className="space-y-4">
-              <Input
-                label="Name"
-                value={newEmployee.name}
-                onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })}
-                placeholder="Full name"
-              />
-              <Input
-                label="Employee Number"
-                value={newEmployee.employee_number}
-                onChange={(e) => setNewEmployee({ ...newEmployee, employee_number: e.target.value })}
-                placeholder="e.g., 1234"
-              />
-              <Select
-                label="Classification"
-                value={newEmployee.classification}
-                onChange={(e) => setNewEmployee({ ...newEmployee, classification: e.target.value })}
-                options={classifications.map(c => ({ value: c, label: c }))}
-              />
-              <Input
-                label="Phone"
-                value={newEmployee.phone}
-                onChange={(e) => setNewEmployee({ ...newEmployee, phone: e.target.value })}
-                placeholder="555-0100"
-              />
+              <Input label="Name" value={newEmployee.name} onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })} placeholder="Full name" />
+              <Input label="Employee Number" value={newEmployee.employee_number} onChange={(e) => setNewEmployee({ ...newEmployee, employee_number: e.target.value })} placeholder="e.g., 1234" />
+              <Select label="Classification" value={newEmployee.classification} onChange={(e) => setNewEmployee({ ...newEmployee, classification: e.target.value })} options={classifications.map(c => ({ value: c, label: c }))} />
+              <Input label="Phone" value={newEmployee.phone} onChange={(e) => setNewEmployee({ ...newEmployee, phone: e.target.value })} placeholder="555-0100" />
               <div className="flex gap-3 pt-4">
                 <Button variant="secondary" onClick={() => setShowAddModal(false)} className="flex-1">Cancel</Button>
-                <Button onClick={handleAdd} loading={loading} className="flex-1" disabled={!newEmployee.name}>
-                  Add Employee
-                </Button>
+                <Button onClick={handleAdd} loading={loading} className="flex-1" disabled={!newEmployee.name}>Add Employee</Button>
               </div>
             </div>
           </Card>
         </div>
       )}
 
-      {/* Edit Modal */}
       {editingEmployee && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <Card className="w-full max-w-md">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-zinc-100">Edit Employee</h2>
-              <button onClick={() => setEditingEmployee(null)} className="text-zinc-400 hover:text-zinc-200">
-                <Icons.X />
-              </button>
+              <button onClick={() => setEditingEmployee(null)} className="text-zinc-400 hover:text-zinc-200"><Icons.X /></button>
             </div>
             <div className="space-y-4">
-              <Input
-                label="Name"
-                value={editingEmployee.name}
-                onChange={(e) => setEditingEmployee({ ...editingEmployee, name: e.target.value })}
-              />
-              <Input
-                label="Employee Number"
-                value={editingEmployee.employee_number || ''}
-                onChange={(e) => setEditingEmployee({ ...editingEmployee, employee_number: e.target.value })}
-              />
-              <Select
-                label="Classification"
-                value={editingEmployee.classification}
-                onChange={(e) => setEditingEmployee({ ...editingEmployee, classification: e.target.value })}
-                options={classifications.map(c => ({ value: c, label: c }))}
-              />
-              <Input
-                label="Phone"
-                value={editingEmployee.phone || ''}
-                onChange={(e) => setEditingEmployee({ ...editingEmployee, phone: e.target.value })}
-              />
-              <Select
-                label="Status"
-                value={editingEmployee.active ? 'active' : 'inactive'}
-                onChange={(e) => setEditingEmployee({ ...editingEmployee, active: e.target.value === 'active' })}
-                options={[{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }]}
-              />
+              <Input label="Name" value={editingEmployee.name} onChange={(e) => setEditingEmployee({ ...editingEmployee, name: e.target.value })} />
+              <Input label="Employee Number" value={editingEmployee.employee_number || ''} onChange={(e) => setEditingEmployee({ ...editingEmployee, employee_number: e.target.value })} />
+              <Select label="Classification" value={editingEmployee.classification} onChange={(e) => setEditingEmployee({ ...editingEmployee, classification: e.target.value })} options={classifications.map(c => ({ value: c, label: c }))} />
+              <Input label="Phone" value={editingEmployee.phone || ''} onChange={(e) => setEditingEmployee({ ...editingEmployee, phone: e.target.value })} />
+              <Select label="Status" value={editingEmployee.active ? 'active' : 'inactive'} onChange={(e) => setEditingEmployee({ ...editingEmployee, active: e.target.value === 'active' })} options={[{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }]} />
               <div className="flex gap-3 pt-4">
                 <Button variant="secondary" onClick={() => setEditingEmployee(null)} className="flex-1">Cancel</Button>
                 <Button onClick={handleUpdate} loading={loading} className="flex-1">Save Changes</Button>
@@ -802,20 +906,20 @@ const EmployeesView = ({ employees, onRefresh, readOnly = false }) => {
 // CREWS VIEW
 // =============================================
 
-const CrewsView = ({ crews, employees, profile, onRefresh }) => {
+const CrewsView = ({ crews, employees, profiles, profile, onRefresh }) => {
   const [selectedCrew, setSelectedCrew] = useState(null)
   const [isEditing, setIsEditing] = useState(false)
   const [selectedMembers, setSelectedMembers] = useState([])
   const [loading, setLoading] = useState(false)
 
   const isForeman = profile?.role === 'foreman'
+  const isSupervisor = profile?.role === 'supervisor'
   const userCrew = isForeman ? crews.find(c => c.foreman_user_id === profile.id) : null
+  const supervisorCrews = isSupervisor ? crews.filter(c => c.supervisor_id === profile.id) : []
 
-  const displayCrews = isForeman ? (userCrew ? [userCrew] : []) : crews
+  const displayCrews = isForeman ? (userCrew ? [userCrew] : []) : isSupervisor ? supervisorCrews : crews
 
-  const availableEmployees = employees.filter(e => 
-    e.active && e.classification !== 'Foreman'
-  )
+  const availableEmployees = employees.filter(e => e.active && e.classification !== 'Foreman')
 
   const startEditing = (crew) => {
     setSelectedCrew(crew)
@@ -824,28 +928,15 @@ const CrewsView = ({ crews, employees, profile, onRefresh }) => {
   }
 
   const toggleMember = (id) => {
-    setSelectedMembers(prev => 
-      prev.includes(id) ? prev.filter(m => m !== id) : [...prev, id]
-    )
+    setSelectedMembers(prev => prev.includes(id) ? prev.filter(m => m !== id) : [...prev, id])
   }
 
   const handleSave = async () => {
     setLoading(true)
-    
-    await supabase
-      .from('crew_members')
-      .delete()
-      .eq('crew_id', selectedCrew.id)
-    
+    await supabase.from('crew_members').delete().eq('crew_id', selectedCrew.id)
     if (selectedMembers.length > 0) {
-      await supabase
-        .from('crew_members')
-        .insert(selectedMembers.map(empId => ({
-          crew_id: selectedCrew.id,
-          employee_id: empId
-        })))
+      await supabase.from('crew_members').insert(selectedMembers.map(empId => ({ crew_id: selectedCrew.id, employee_id: empId })))
     }
-    
     setIsEditing(false)
     setSelectedCrew(null)
     onRefresh()
@@ -853,9 +944,7 @@ const CrewsView = ({ crews, employees, profile, onRefresh }) => {
   }
 
   if (isForeman && userCrew) {
-    const crewMembers = employees.filter(e => 
-      userCrew.crew_members?.some(m => m.employee_id === e.id)
-    )
+    const crewMembers = employees.filter(e => userCrew.crew_members?.some(m => m.employee_id === e.id))
     const foreman = employees.find(e => e.id === userCrew.foreman_id)
 
     return (
@@ -900,15 +989,11 @@ const CrewsView = ({ crews, employees, profile, onRefresh }) => {
                     key={emp.id}
                     onClick={() => toggleMember(emp.id)}
                     className={`flex items-center gap-4 p-3 rounded-lg border transition-all text-left ${
-                      selectedMembers.includes(emp.id)
-                        ? 'border-amber-500 bg-amber-500/10'
-                        : 'border-zinc-700 hover:border-zinc-600 bg-zinc-800/50'
+                      selectedMembers.includes(emp.id) ? 'border-amber-500 bg-amber-500/10' : 'border-zinc-700 hover:border-zinc-600 bg-zinc-800/50'
                     }`}
                   >
                     <div className={`w-6 h-6 rounded border-2 flex items-center justify-center ${
-                      selectedMembers.includes(emp.id)
-                        ? 'border-amber-500 bg-amber-500 text-zinc-900'
-                        : 'border-zinc-600'
+                      selectedMembers.includes(emp.id) ? 'border-amber-500 bg-amber-500 text-zinc-900' : 'border-zinc-600'
                     }`}>
                       {selectedMembers.includes(emp.id) && <Icons.Check />}
                     </div>
@@ -952,16 +1037,15 @@ const CrewsView = ({ crews, employees, profile, onRefresh }) => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-zinc-100">All Crews</h1>
-        <p className="text-zinc-500">{crews.length} active crews</p>
+        <h1 className="text-2xl font-bold text-zinc-100">{isSupervisor ? 'My Crews' : 'All Crews'}</h1>
+        <p className="text-zinc-500">{displayCrews.length} crews</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {displayCrews.map(crew => {
           const foreman = employees.find(e => e.id === crew.foreman_id)
-          const members = employees.filter(e => 
-            crew.crew_members?.some(m => m.employee_id === e.id)
-          )
+          const supervisor = profiles?.find(p => p.id === crew.supervisor_id)
+          const members = employees.filter(e => crew.crew_members?.some(m => m.employee_id === e.id))
           
           return (
             <Card key={crew.id} className="hover:border-zinc-700 transition-colors">
@@ -969,6 +1053,9 @@ const CrewsView = ({ crews, employees, profile, onRefresh }) => {
                 <div>
                   <h3 className="font-semibold text-zinc-100">{crew.name}</h3>
                   <p className="text-sm text-zinc-500">Foreman: {foreman?.name || 'Not assigned'}</p>
+                  {!isSupervisor && supervisor && (
+                    <p className="text-sm text-zinc-500">Supervisor: {supervisor.name}</p>
+                  )}
                 </div>
                 <Button variant="ghost" size="sm" onClick={() => setSelectedCrew(crew)}>
                   <span className="flex items-center gap-1"><Icons.Eye /> View</span>
@@ -979,24 +1066,19 @@ const CrewsView = ({ crews, employees, profile, onRefresh }) => {
                 {members.slice(0, 3).map(m => (
                   <div key={m.id} className="flex items-center gap-2 px-2 py-1 bg-zinc-800 rounded text-sm">
                     <span className="text-zinc-300">{m.name}</span>
-                    <Badge variant="default">{m.classification}</Badge>
                   </div>
                 ))}
-                {members.length > 3 && (
-                  <span className="px-2 py-1 text-sm text-zinc-500">+{members.length - 3} more</span>
-                )}
-                {members.length === 0 && (
-                  <span className="text-sm text-zinc-500">No members assigned</span>
-                )}
+                {members.length > 3 && <span className="px-2 py-1 text-sm text-zinc-500">+{members.length - 3} more</span>}
+                {members.length === 0 && <span className="text-sm text-zinc-500">No members assigned</span>}
               </div>
             </Card>
           )
         })}
       </div>
 
-      {crews.length === 0 && (
+      {displayCrews.length === 0 && (
         <Card className="text-center py-12">
-          <p className="text-zinc-400">No crews created yet</p>
+          <p className="text-zinc-400">{isSupervisor ? 'No crews assigned to you' : 'No crews created yet'}</p>
         </Card>
       )}
 
@@ -1005,14 +1087,10 @@ const CrewsView = ({ crews, employees, profile, onRefresh }) => {
           <Card className="w-full max-w-2xl max-h-[80vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-zinc-100">{selectedCrew.name}</h2>
-              <button onClick={() => setSelectedCrew(null)} className="text-zinc-400 hover:text-zinc-200">
-                <Icons.X />
-              </button>
+              <button onClick={() => setSelectedCrew(null)} className="text-zinc-400 hover:text-zinc-200"><Icons.X /></button>
             </div>
             <div className="space-y-4">
-              {employees.filter(e => 
-                selectedCrew.crew_members?.some(m => m.employee_id === e.id) || e.id === selectedCrew.foreman_id
-              ).map(emp => (
+              {employees.filter(e => selectedCrew.crew_members?.some(m => m.employee_id === e.id) || e.id === selectedCrew.foreman_id).map(emp => (
                 <div key={emp.id} className="flex items-center gap-4 p-3 bg-zinc-800/50 rounded-lg">
                   <div className="w-10 h-10 bg-zinc-700 rounded-full flex items-center justify-center text-zinc-300 font-medium">
                     {emp.name.split(' ').map(n => n[0]).join('')}
@@ -1042,86 +1120,49 @@ const EquipmentView = ({ equipment, crews, profile, onRefresh }) => {
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingEquipment, setEditingEquipment] = useState(null)
   const [loading, setLoading] = useState(false)
-  const [newEquipment, setNewEquipment] = useState({
-    type: 'Tool',
-    description: '',
-    equipment_number: '',
-    serial_number: '',
-    photo_url: null,
-    status: 'In Service',
-    notes: ''
-  })
+  const [newEquipment, setNewEquipment] = useState({ type: 'Tool', description: '', equipment_number: '', serial_number: '', photo_url: null, status: 'In Service', notes: '' })
 
   const isForeman = profile?.role === 'foreman'
   const userCrew = isForeman ? crews.find(c => c.foreman_user_id === profile.id) : null
-  const filteredEquipment = isForeman && userCrew 
-    ? equipment.filter(e => e.crew_id === userCrew.id)
-    : equipment
+  const filteredEquipment = isForeman && userCrew ? equipment.filter(e => e.crew_id === userCrew.id) : equipment
 
   const equipmentTypes = ['Truck', 'Trailer', 'Excavator', 'Tool', 'Other']
 
   const handlePhotoUpload = async (e, isEdit = false) => {
     const file = e.target.files?.[0]
     if (!file) return
-
     const fileExt = file.name.split('.').pop()
     const fileName = `${Date.now()}.${fileExt}`
-    
-    const { data, error } = await supabase.storage
-      .from('equipment-photos')
-      .upload(fileName, file)
-    
+    const { error } = await supabase.storage.from('equipment-photos').upload(fileName, file)
     if (!error) {
-      const { data: { publicUrl } } = supabase.storage
-        .from('equipment-photos')
-        .getPublicUrl(fileName)
-      
-      if (isEdit) {
-        setEditingEquipment({ ...editingEquipment, photo_url: publicUrl })
-      } else {
-        setNewEquipment({ ...newEquipment, photo_url: publicUrl })
-      }
+      const { data: { publicUrl } } = supabase.storage.from('equipment-photos').getPublicUrl(fileName)
+      if (isEdit) setEditingEquipment({ ...editingEquipment, photo_url: publicUrl })
+      else setNewEquipment({ ...newEquipment, photo_url: publicUrl })
     }
   }
 
   const handleAdd = async () => {
     setLoading(true)
-    const { error } = await supabase
-      .from('equipment')
-      .insert([{ ...newEquipment, crew_id: userCrew?.id }])
-    
-    if (!error) {
-      setNewEquipment({ type: 'Tool', description: '', equipment_number: '', serial_number: '', photo_url: null, status: 'In Service', notes: '' })
-      setShowAddModal(false)
-      onRefresh()
-    }
+    await supabase.from('equipment').insert([{ ...newEquipment, crew_id: userCrew?.id }])
+    setNewEquipment({ type: 'Tool', description: '', equipment_number: '', serial_number: '', photo_url: null, status: 'In Service', notes: '' })
+    setShowAddModal(false)
+    onRefresh()
     setLoading(false)
   }
 
   const handleUpdate = async () => {
     setLoading(true)
-    const { error } = await supabase
-      .from('equipment')
-      .update({
-        type: editingEquipment.type,
-        description: editingEquipment.description,
-        equipment_number: editingEquipment.equipment_number,
-        serial_number: editingEquipment.serial_number,
-        photo_url: editingEquipment.photo_url,
-        status: editingEquipment.status,
-        notes: editingEquipment.notes,
-      })
-      .eq('id', editingEquipment.id)
-    
-    if (!error) {
-      setEditingEquipment(null)
-      onRefresh()
-    }
+    await supabase.from('equipment').update({
+      type: editingEquipment.type, description: editingEquipment.description, equipment_number: editingEquipment.equipment_number,
+      serial_number: editingEquipment.serial_number, photo_url: editingEquipment.photo_url, status: editingEquipment.status, notes: editingEquipment.notes,
+    }).eq('id', editingEquipment.id)
+    setEditingEquipment(null)
+    onRefresh()
     setLoading(false)
   }
 
   const handleDelete = async (id) => {
-    if (confirm('Are you sure you want to remove this equipment?')) {
+    if (confirm('Are you sure?')) {
       await supabase.from('equipment').delete().eq('id', id)
       onRefresh()
     }
@@ -1147,49 +1188,33 @@ const EquipmentView = ({ equipment, crews, profile, onRefresh }) => {
         {filteredEquipment.map(item => {
           const crew = crews.find(c => c.id === item.crew_id)
           return (
-            <Card key={item.id} className={`${item.status === 'Out of Service' ? 'border-amber-700/50' : ''}`}>
+            <Card key={item.id} className={item.status === 'Out of Service' ? 'border-amber-700/50' : ''}>
               {item.photo_url ? (
                 <div className="w-full h-40 mb-4 rounded-lg overflow-hidden bg-zinc-800">
                   <img src={item.photo_url} alt={item.description} className="w-full h-full object-cover" />
                 </div>
               ) : (
                 <div className="w-full h-40 mb-4 rounded-lg bg-zinc-800 flex items-center justify-center text-zinc-600">
-                  <Icons.Camera />
-                  <span className="ml-2">No photo</span>
+                  <Icons.Camera /><span className="ml-2">No photo</span>
                 </div>
               )}
-              
               <div className="space-y-2">
                 <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-semibold text-zinc-100">{item.description}</h3>
-                    <p className="text-sm text-zinc-500">{item.type}</p>
-                  </div>
-                  <Badge variant={item.status === 'In Service' ? 'success' : 'warning'}>
-                    {item.status}
-                  </Badge>
+                  <div><h3 className="font-semibold text-zinc-100">{item.description}</h3><p className="text-sm text-zinc-500">{item.type}</p></div>
+                  <Badge variant={item.status === 'In Service' ? 'success' : 'warning'}>{item.status}</Badge>
                 </div>
-                
                 <div className="text-sm text-zinc-400 space-y-1">
                   <p>Equipment #: <span className="text-zinc-300">{item.equipment_number}</span></p>
                   <p>Serial #: <span className="text-zinc-300">{item.serial_number || '-'}</span></p>
-                  {!isForeman && crew && (
-                    <p>Crew: <span className="text-zinc-300">{crew.name}</span></p>
-                  )}
+                  {!isForeman && crew && <p>Crew: <span className="text-zinc-300">{crew.name}</span></p>}
                 </div>
-
-                {item.notes && (
-                  <p className="text-sm text-amber-400 bg-amber-900/20 rounded px-2 py-1">{item.notes}</p>
-                )}
-
+                {item.notes && <p className="text-sm text-amber-400 bg-amber-900/20 rounded px-2 py-1">{item.notes}</p>}
                 {!readOnly && (
                   <div className="flex gap-2 pt-2">
                     <Button variant="secondary" size="sm" onClick={() => setEditingEquipment(item)} className="flex-1">
                       <span className="flex items-center justify-center gap-1"><Icons.Edit /> Edit</span>
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(item.id)}>
-                      <Icons.Trash />
-                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => handleDelete(item.id)}><Icons.Trash /></Button>
                   </div>
                 )}
               </div>
@@ -1202,146 +1227,60 @@ const EquipmentView = ({ equipment, crews, profile, onRefresh }) => {
         <Card className="text-center py-12">
           <div className="text-zinc-600 mb-4"><Icons.Truck /></div>
           <p className="text-zinc-400">No equipment tracked yet</p>
-          {!readOnly && (
-            <Button onClick={() => setShowAddModal(true)} className="mt-4">Add Your First Equipment</Button>
-          )}
+          {!readOnly && <Button onClick={() => setShowAddModal(true)} className="mt-4">Add Your First Equipment</Button>}
         </Card>
       )}
 
-      {/* Add Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <Card className="w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-zinc-100">Add Equipment</h2>
-              <button onClick={() => setShowAddModal(false)} className="text-zinc-400 hover:text-zinc-200">
-                <Icons.X />
-              </button>
+              <button onClick={() => setShowAddModal(false)} className="text-zinc-400 hover:text-zinc-200"><Icons.X /></button>
             </div>
             <div className="space-y-4">
-              <Select
-                label="Type"
-                value={newEquipment.type}
-                onChange={(e) => setNewEquipment({ ...newEquipment, type: e.target.value })}
-                options={equipmentTypes.map(t => ({ value: t, label: t }))}
-              />
-              <Input
-                label="Description"
-                value={newEquipment.description}
-                onChange={(e) => setNewEquipment({ ...newEquipment, description: e.target.value })}
-                placeholder="e.g., 2022 Ford F-350"
-              />
-              <Input
-                label="Equipment Number"
-                value={newEquipment.equipment_number}
-                onChange={(e) => setNewEquipment({ ...newEquipment, equipment_number: e.target.value })}
-                placeholder="e.g., TRK-001"
-              />
-              <Input
-                label="Serial Number"
-                value={newEquipment.serial_number}
-                onChange={(e) => setNewEquipment({ ...newEquipment, serial_number: e.target.value })}
-                placeholder="e.g., 1FT8W3BT5NEC12345"
-              />
-              
+              <Select label="Type" value={newEquipment.type} onChange={(e) => setNewEquipment({ ...newEquipment, type: e.target.value })} options={equipmentTypes.map(t => ({ value: t, label: t }))} />
+              <Input label="Description" value={newEquipment.description} onChange={(e) => setNewEquipment({ ...newEquipment, description: e.target.value })} placeholder="e.g., 2022 Ford F-350" />
+              <Input label="Equipment Number" value={newEquipment.equipment_number} onChange={(e) => setNewEquipment({ ...newEquipment, equipment_number: e.target.value })} placeholder="e.g., TRK-001" />
+              <Input label="Serial Number" value={newEquipment.serial_number} onChange={(e) => setNewEquipment({ ...newEquipment, serial_number: e.target.value })} />
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm text-zinc-400 font-medium">Photo</label>
-                <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-zinc-700 border-dashed rounded-lg cursor-pointer hover:border-amber-500 transition-colors bg-zinc-800/50">
-                  {newEquipment.photo_url ? (
-                    <img src={newEquipment.photo_url} alt="Preview" className="h-full object-contain rounded" />
-                  ) : (
-                    <div className="flex flex-col items-center text-zinc-500">
-                      <Icons.Camera />
-                      <span className="text-sm mt-2">Tap to take or upload photo</span>
-                    </div>
-                  )}
+                <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-zinc-700 border-dashed rounded-lg cursor-pointer hover:border-amber-500 bg-zinc-800/50">
+                  {newEquipment.photo_url ? <img src={newEquipment.photo_url} alt="Preview" className="h-full object-contain rounded" /> : <div className="flex flex-col items-center text-zinc-500"><Icons.Camera /><span className="text-sm mt-2">Tap to upload</span></div>}
                   <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handlePhotoUpload(e)} />
                 </label>
               </div>
-
-              <Textarea
-                label="Notes (optional)"
-                value={newEquipment.notes}
-                onChange={(e) => setNewEquipment({ ...newEquipment, notes: e.target.value })}
-                placeholder="Any additional notes..."
-              />
-              
+              <Textarea label="Notes" value={newEquipment.notes} onChange={(e) => setNewEquipment({ ...newEquipment, notes: e.target.value })} />
               <div className="flex gap-3 pt-4">
                 <Button variant="secondary" onClick={() => setShowAddModal(false)} className="flex-1">Cancel</Button>
-                <Button onClick={handleAdd} loading={loading} className="flex-1" disabled={!newEquipment.description || !newEquipment.equipment_number}>
-                  Add Equipment
-                </Button>
+                <Button onClick={handleAdd} loading={loading} className="flex-1" disabled={!newEquipment.description || !newEquipment.equipment_number}>Add Equipment</Button>
               </div>
             </div>
           </Card>
         </div>
       )}
 
-      {/* Edit Modal */}
       {editingEquipment && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <Card className="w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-zinc-100">Edit Equipment</h2>
-              <button onClick={() => setEditingEquipment(null)} className="text-zinc-400 hover:text-zinc-200">
-                <Icons.X />
-              </button>
+              <button onClick={() => setEditingEquipment(null)} className="text-zinc-400 hover:text-zinc-200"><Icons.X /></button>
             </div>
             <div className="space-y-4">
-              <Select
-                label="Type"
-                value={editingEquipment.type}
-                onChange={(e) => setEditingEquipment({ ...editingEquipment, type: e.target.value })}
-                options={equipmentTypes.map(t => ({ value: t, label: t }))}
-              />
-              <Input
-                label="Description"
-                value={editingEquipment.description}
-                onChange={(e) => setEditingEquipment({ ...editingEquipment, description: e.target.value })}
-              />
-              <Input
-                label="Equipment Number"
-                value={editingEquipment.equipment_number}
-                onChange={(e) => setEditingEquipment({ ...editingEquipment, equipment_number: e.target.value })}
-              />
-              <Input
-                label="Serial Number"
-                value={editingEquipment.serial_number || ''}
-                onChange={(e) => setEditingEquipment({ ...editingEquipment, serial_number: e.target.value })}
-              />
-              
+              <Select label="Type" value={editingEquipment.type} onChange={(e) => setEditingEquipment({ ...editingEquipment, type: e.target.value })} options={equipmentTypes.map(t => ({ value: t, label: t }))} />
+              <Input label="Description" value={editingEquipment.description} onChange={(e) => setEditingEquipment({ ...editingEquipment, description: e.target.value })} />
+              <Input label="Equipment Number" value={editingEquipment.equipment_number} onChange={(e) => setEditingEquipment({ ...editingEquipment, equipment_number: e.target.value })} />
+              <Input label="Serial Number" value={editingEquipment.serial_number || ''} onChange={(e) => setEditingEquipment({ ...editingEquipment, serial_number: e.target.value })} />
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm text-zinc-400 font-medium">Photo</label>
-                <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-zinc-700 border-dashed rounded-lg cursor-pointer hover:border-amber-500 transition-colors bg-zinc-800/50">
-                  {editingEquipment.photo_url ? (
-                    <img src={editingEquipment.photo_url} alt="Preview" className="h-full object-contain rounded" />
-                  ) : (
-                    <div className="flex flex-col items-center text-zinc-500">
-                      <Icons.Camera />
-                      <span className="text-sm mt-2">Tap to take or upload photo</span>
-                    </div>
-                  )}
+                <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-zinc-700 border-dashed rounded-lg cursor-pointer hover:border-amber-500 bg-zinc-800/50">
+                  {editingEquipment.photo_url ? <img src={editingEquipment.photo_url} alt="Preview" className="h-full object-contain rounded" /> : <div className="flex flex-col items-center text-zinc-500"><Icons.Camera /><span className="text-sm mt-2">Tap to upload</span></div>}
                   <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handlePhotoUpload(e, true)} />
                 </label>
               </div>
-
-              <Select
-                label="Status"
-                value={editingEquipment.status}
-                onChange={(e) => setEditingEquipment({ ...editingEquipment, status: e.target.value })}
-                options={[
-                  { value: 'In Service', label: 'In Service' },
-                  { value: 'Out of Service', label: 'Out of Service' }
-                ]}
-              />
-
-              <Textarea
-                label="Notes"
-                value={editingEquipment.notes || ''}
-                onChange={(e) => setEditingEquipment({ ...editingEquipment, notes: e.target.value })}
-                placeholder="Any additional notes..."
-              />
-              
+              <Select label="Status" value={editingEquipment.status} onChange={(e) => setEditingEquipment({ ...editingEquipment, status: e.target.value })} options={[{ value: 'In Service', label: 'In Service' }, { value: 'Out of Service', label: 'Out of Service' }]} />
+              <Textarea label="Notes" value={editingEquipment.notes || ''} onChange={(e) => setEditingEquipment({ ...editingEquipment, notes: e.target.value })} />
               <div className="flex gap-3 pt-4">
                 <Button variant="secondary" onClick={() => setEditingEquipment(null)} className="flex-1">Cancel</Button>
                 <Button onClick={handleUpdate} loading={loading} className="flex-1">Save Changes</Button>
@@ -1355,145 +1294,243 @@ const EquipmentView = ({ equipment, crews, profile, onRefresh }) => {
 }
 
 // =============================================
-// LEAK REPORTS VIEW
+// LEAK REPORT FORM COMPONENT
 // =============================================
 
-const LeakReportsView = ({ leakReports, crews, profile, onRefresh }) => {
+const LeakReportForm = ({ formData, updateForm, addDowntimePeriod, updateDowntimePeriod, removeDowntimePeriod, disabled = false }) => (
+  <div className="space-y-6">
+    {/* Header Section */}
+    <div className="space-y-4">
+      <h3 className="text-lg font-semibold text-amber-400 border-b border-zinc-800 pb-2">Basic Information</h3>
+      <div className="grid grid-cols-2 gap-4">
+        <Input label="Date" type="date" value={formData.date} onChange={(e) => updateForm('date', e.target.value)} disabled={disabled} />
+        <Input label="Supervisor" value={formData.supervisor} onChange={(e) => updateForm('supervisor', e.target.value)} disabled={disabled} />
+        <Input label="Project #" value={formData.project_number} onChange={(e) => updateForm('project_number', e.target.value)} disabled={disabled} />
+        <Input label="Leak #" value={formData.leak_number} onChange={(e) => updateForm('leak_number', e.target.value)} disabled={disabled} />
+      </div>
+      <Input label="Address" value={formData.address} onChange={(e) => updateForm('address', e.target.value)} placeholder="Full address" disabled={disabled} />
+    </div>
+
+    {/* Job Type */}
+    <div className="space-y-4">
+      <h3 className="text-lg font-semibold text-amber-400 border-b border-zinc-800 pb-2">Job Type</h3>
+      <div className="flex flex-wrap gap-2">
+        {[{ value: 'regular_leak', label: 'Regular Leak' }, { value: 'grade_1', label: 'Grade 1' }, { value: 'laying_sod_cleanup', label: 'Laying Sod/Cleanup' }].map(type => (
+          <button key={type.value} type="button" onClick={() => !disabled && updateForm('job_type', type.value)} disabled={disabled}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${formData.job_type === type.value ? 'bg-amber-500 text-zinc-900' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
+            {type.label}
+          </button>
+        ))}
+      </div>
+      {(formData.job_type === 'grade_1' || formData.crew_called_off_to_grade_1 || formData.leak_turned_into_grade_1) && (
+        <div className="bg-red-900/20 border border-red-800 rounded-lg p-4 space-y-3">
+          <Toggle label="Crew Called Off to GRADE 1" checked={formData.crew_called_off_to_grade_1} onChange={(v) => updateForm('crew_called_off_to_grade_1', v)} disabled={disabled} />
+          {formData.crew_called_off_to_grade_1 && <TimeInput label="Time Called OFF" value={formData.time_called_off_to_grade_1} onChange={(v) => updateForm('time_called_off_to_grade_1', v)} disabled={disabled} />}
+          <Toggle label="Leak Turned into GRADE 1" checked={formData.leak_turned_into_grade_1} onChange={(v) => updateForm('leak_turned_into_grade_1', v)} disabled={disabled} />
+          {formData.leak_turned_into_grade_1 && <TimeInput label="Time Turned GRADE 1" value={formData.time_leak_turned_grade_1} onChange={(v) => updateForm('time_leak_turned_grade_1', v)} disabled={disabled} />}
+        </div>
+      )}
+    </div>
+
+    {/* Regular Leak Questions */}
+    {formData.job_type === 'regular_leak' && (
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold text-amber-400 border-b border-zinc-800 pb-2">Regular Leak Details</h3>
+        <YesNoToggle label="Leak Located?" value={formData.leak_located} onChange={(v) => updateForm('leak_located', v)} disabled={disabled} />
+        <YesNoToggle label="Leak Located before arrival?" value={formData.leak_located_before_arrival} onChange={(v) => updateForm('leak_located_before_arrival', v)} disabled={disabled} />
+        {formData.leak_located === false && <YesNoToggle label="Over 25 min to locate?" value={formData.took_over_25_min_to_locate} onChange={(v) => updateForm('took_over_25_min_to_locate', v)} disabled={disabled} />}
+        
+        <div className="grid grid-cols-2 gap-4 py-3">
+          <div>
+            <p className="text-sm text-zinc-400 mb-2">Type of Leak</p>
+            <div className="flex gap-2">
+              {['main', 'service'].map(t => (
+                <button key={t} type="button" onClick={() => !disabled && updateForm('leak_type', formData.leak_type === t ? '' : t)} disabled={disabled}
+                  className={`px-3 py-1.5 rounded font-medium capitalize ${formData.leak_type === t ? 'bg-amber-500 text-zinc-900' : 'bg-zinc-800 text-zinc-400'} ${disabled ? 'opacity-50' : ''}`}>
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-sm text-zinc-400 mb-2">Pipe Type</p>
+            <div className="flex gap-2">
+              {['steel', 'poly'].map(t => (
+                <button key={t} type="button" onClick={() => !disabled && updateForm('pipe_type', formData.pipe_type === t ? '' : t)} disabled={disabled}
+                  className={`px-3 py-1.5 rounded font-medium capitalize ${formData.pipe_type === t ? 'bg-amber-500 text-zinc-900' : 'bg-zinc-800 text-zinc-400'} ${disabled ? 'opacity-50' : ''}`}>
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-sm text-zinc-400">Type of Replacement</p>
+          <CheckboxWithQty label="Short Side" checked={formData.short_side} onCheckChange={(v) => updateForm('short_side', v)} qty={formData.short_side_qty} onQtyChange={(v) => updateForm('short_side_qty', v)} disabled={disabled} />
+          <CheckboxWithQty label="Long Side" checked={formData.long_side} onCheckChange={(v) => updateForm('long_side', v)} qty={formData.long_side_qty} onQtyChange={(v) => updateForm('long_side_qty', v)} disabled={disabled} />
+          <CheckboxWithQty label="Insert" checked={formData.insert_replacement} onCheckChange={(v) => updateForm('insert_replacement', v)} qty={formData.insert_qty} onQtyChange={(v) => updateForm('insert_qty', v)} disabled={disabled} />
+          <CheckboxWithQty label="Retirement" checked={formData.retirement} onCheckChange={(v) => updateForm('retirement', v)} qty={formData.retirement_qty} onQtyChange={(v) => updateForm('retirement_qty', v)} disabled={disabled} />
+        </div>
+
+        <YesNoToggle label="Section out main?" value={formData.section_out_main} onChange={(v) => updateForm('section_out_main', v)} disabled={disabled} />
+        <YesNoToggle label="Excessive Haul Off?" value={formData.excessive_haul_off} onChange={(v) => updateForm('excessive_haul_off', v)} disabled={disabled} />
+        <YesNoToggle label="Excessive restoration?" value={formData.excessive_restoration} onChange={(v) => updateForm('excessive_restoration', v)} disabled={disabled} />
+        <YesNoToggle label="Downtown extensive paving?" value={formData.downtown_extensive_paving} onChange={(v) => updateForm('downtown_extensive_paving', v)} disabled={disabled} />
+        <YesNoToggle label="Increased Traffic control?" value={formData.increased_traffic_control} onChange={(v) => updateForm('increased_traffic_control', v)} disabled={disabled} />
+        <YesNoToggle label="Rock in Bellhole?" value={formData.rock_in_bellhole} onChange={(v) => updateForm('rock_in_bellhole', v)} disabled={disabled} />
+        <YesNoToggle label="Street Plates Used?" value={formData.street_plates_used} onChange={(v) => updateForm('street_plates_used', v)} disabled={disabled} />
+        <YesNoToggle label="Vac Truck Used?" value={formData.vac_truck_used} onChange={(v) => updateForm('vac_truck_used', v)} disabled={disabled} />
+      </div>
+    )}
+
+    {/* Downtime */}
+    <div className="space-y-4">
+      <h3 className="text-lg font-semibold text-amber-400 border-b border-zinc-800 pb-2">Downtime Due to Atmos</h3>
+      {(formData.downtime_periods || []).map((period, index) => (
+        <div key={index} className="flex items-center gap-3 bg-zinc-800/50 p-3 rounded-lg">
+          <TimeInput label="Start" value={period.start} onChange={(v) => updateDowntimePeriod(index, 'start', v)} disabled={disabled} />
+          <TimeInput label="End" value={period.end} onChange={(v) => updateDowntimePeriod(index, 'end', v)} disabled={disabled} />
+          {!disabled && <button type="button" onClick={() => removeDowntimePeriod(index)} className="p-2 text-red-400 hover:bg-zinc-700 rounded mt-6"><Icons.Trash /></button>}
+        </div>
+      ))}
+      {!disabled && <Button variant="secondary" size="sm" onClick={addDowntimePeriod}><span className="flex items-center gap-2"><Icons.Plus /> Add Downtime</span></Button>}
+    </div>
+
+    {/* Adders */}
+    <div className="space-y-4">
+      <h3 className="text-lg font-semibold text-amber-400 border-b border-zinc-800 pb-2">Adders Used</h3>
+      <CheckboxWithQty label="NoBlowKit" checked={formData.no_blow_kit} onCheckChange={(v) => updateForm('no_blow_kit', v)} qty={formData.no_blow_kit_qty} onQtyChange={(v) => updateForm('no_blow_kit_qty', v)} disabled={disabled} />
+      <CheckboxWithQty label='2"-4" Short Stop' checked={formData.short_stop_2_4} onCheckChange={(v) => updateForm('short_stop_2_4', v)} qty={formData.short_stop_2_4_qty} onQtyChange={(v) => updateForm('short_stop_2_4_qty', v)} disabled={disabled} />
+      <CheckboxWithQty label='6"+ Short Stop' checked={formData.short_stop_6_plus} onCheckChange={(v) => updateForm('short_stop_6_plus', v)} qty={formData.short_stop_6_plus_qty} onQtyChange={(v) => updateForm('short_stop_6_plus_qty', v)} disabled={disabled} />
+    </div>
+
+    {/* Welder */}
+    <div className="space-y-4">
+      <h3 className="text-lg font-semibold text-amber-400 border-b border-zinc-800 pb-2">Welder</h3>
+      <YesNoToggle label="Welder Used?" value={formData.welder_used} onChange={(v) => updateForm('welder_used', v)} disabled={disabled} />
+      {formData.welder_used && (
+        <div className="flex gap-2">
+          {['bobcat', 'subbed_out'].map(t => (
+            <button key={t} type="button" onClick={() => !disabled && updateForm('welder_type', t)} disabled={disabled}
+              className={`px-3 py-1.5 rounded font-medium ${formData.welder_type === t ? 'bg-amber-500 text-zinc-900' : 'bg-zinc-800 text-zinc-400'} ${disabled ? 'opacity-50' : ''}`}>
+              {t === 'bobcat' ? 'Bobcat Welder' : 'Subbed Out'}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+
+    {/* Bore */}
+    <div className="space-y-4">
+      <h3 className="text-lg font-semibold text-amber-400 border-b border-zinc-800 pb-2">Bore</h3>
+      <YesNoToggle label="Bore Used?" value={formData.bore_used} onChange={(v) => updateForm('bore_used', v)} disabled={disabled} />
+      {formData.bore_used && (
+        <>
+          <div className="flex gap-2">
+            {['bobcat', 'subbed_out'].map(t => (
+              <button key={t} type="button" onClick={() => !disabled && updateForm('bore_type', t)} disabled={disabled}
+                className={`px-3 py-1.5 rounded font-medium ${formData.bore_type === t ? 'bg-amber-500 text-zinc-900' : 'bg-zinc-800 text-zinc-400'} ${disabled ? 'opacity-50' : ''}`}>
+                {t === 'bobcat' ? 'Bobcat Bore' : 'Subbed Out'}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <p className="text-sm text-zinc-400 self-center">Soil:</p>
+            {['dirt', 'rock'].map(t => (
+              <button key={t} type="button" onClick={() => !disabled && updateForm('soil_type', t)} disabled={disabled}
+                className={`px-3 py-1.5 rounded font-medium capitalize ${formData.soil_type === t ? 'bg-amber-500 text-zinc-900' : 'bg-zinc-800 text-zinc-400'} ${disabled ? 'opacity-50' : ''}`}>
+                {t}
+              </button>
+            ))}
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Input label="Bore Size (in)" type="number" value={formData.bore_size_inches} onChange={(e) => updateForm('bore_size_inches', e.target.value)} disabled={disabled} />
+            <Input label="Bore Footage (ft)" type="number" value={formData.bore_footage} onChange={(e) => updateForm('bore_footage', e.target.value)} disabled={disabled} />
+          </div>
+        </>
+      )}
+    </div>
+
+    {/* Crew Times */}
+    <div className="space-y-4">
+      <h3 className="text-lg font-semibold text-amber-400 border-b border-zinc-800 pb-2">Crew Times</h3>
+      <div className="grid grid-cols-2 gap-4">
+        <TimeInput label="Start Time" value={formData.crew_start_time} onChange={(v) => updateForm('crew_start_time', v)} disabled={disabled} />
+        <TimeInput label="End Time" value={formData.crew_end_time} onChange={(v) => updateForm('crew_end_time', v)} disabled={disabled} />
+      </div>
+    </div>
+
+    {/* Completion */}
+    <div className="space-y-4">
+      <h3 className="text-lg font-semibold text-amber-400 border-b border-zinc-800 pb-2">Completion</h3>
+      <YesNoToggle label="Leak Repair Completed?" value={formData.leak_repair_completed} onChange={(v) => updateForm('leak_repair_completed', v)} disabled={disabled} />
+    </div>
+
+    {/* FCC */}
+    <div className="space-y-4">
+      <h3 className="text-lg font-semibold text-amber-400 border-b border-zinc-800 pb-2">FCC Information</h3>
+      <Input label="FCC Name" value={formData.fcc_name} onChange={(e) => updateForm('fcc_name', e.target.value)} disabled={disabled} />
+      <Input label="FCC Signature" value={formData.fcc_signature} onChange={(e) => updateForm('fcc_signature', e.target.value)} placeholder="Type name" disabled={disabled} />
+    </div>
+
+    {/* Notes */}
+    <div className="space-y-4">
+      <h3 className="text-lg font-semibold text-amber-400 border-b border-zinc-800 pb-2">Notes</h3>
+      <Textarea value={formData.notes} onChange={(e) => updateForm('notes', e.target.value)} placeholder="Additional notes..." rows={4} disabled={disabled} />
+    </div>
+  </div>
+)
+
+// =============================================
+// FOREMAN LEAK REPORTS VIEW
+// =============================================
+
+const ForemanLeakReportsView = ({ leakReports, crews, profile, onRefresh }) => {
   const [showAddModal, setShowAddModal] = useState(false)
   const [viewingReport, setViewingReport] = useState(null)
   const [loading, setLoading] = useState(false)
   
   const initialFormState = {
-    date: new Date().toISOString().split('T')[0],
-    supervisor: '',
-    project_number: '',
-    leak_number: '',
-    address: '',
-    job_type: 'regular_leak',
-    crew_called_off_to_grade_1: false,
-    time_called_off_to_grade_1: '',
-    leak_turned_into_grade_1: false,
-    time_leak_turned_grade_1: '',
-    rate_type: '',
-    leak_located: null,
-    leak_located_before_arrival: null,
-    took_over_25_min_to_locate: null,
-    section_out_main: null,
-    excessive_haul_off: null,
-    excessive_restoration: null,
-    downtown_extensive_paving: null,
-    increased_traffic_control: null,
-    rock_in_bellhole: null,
-    street_plates_used: null,
-    vac_truck_used: null,
-    leak_type: '',
-    pipe_type: '',
-    short_side: false,
-    short_side_qty: null,
-    long_side: false,
-    long_side_qty: null,
-    insert_replacement: false,
-    insert_qty: null,
-    retirement: false,
-    retirement_qty: null,
-    downtime_periods: [],
-    no_blow_kit: false,
-    no_blow_kit_qty: null,
-    short_stop_2_4: false,
-    short_stop_2_4_qty: null,
-    short_stop_6_plus: false,
-    short_stop_6_plus_qty: null,
-    welder_used: null,
-    welder_type: '',
-    bore_used: null,
-    bore_type: '',
-    soil_type: '',
-    bore_size_inches: '',
-    bore_footage: '',
-    crew_start_time: '',
-    crew_end_time: '',
-    leak_repair_completed: null,
-    fcc_name: '',
-    fcc_signature: '',
-    notes: ''
+    date: new Date().toISOString().split('T')[0], supervisor: '', project_number: '', leak_number: '', address: '', job_type: 'regular_leak',
+    crew_called_off_to_grade_1: false, time_called_off_to_grade_1: '', leak_turned_into_grade_1: false, time_leak_turned_grade_1: '',
+    leak_located: null, leak_located_before_arrival: null, took_over_25_min_to_locate: null, section_out_main: null, excessive_haul_off: null,
+    excessive_restoration: null, downtown_extensive_paving: null, increased_traffic_control: null, rock_in_bellhole: null, street_plates_used: null,
+    vac_truck_used: null, leak_type: '', pipe_type: '', short_side: false, short_side_qty: null, long_side: false, long_side_qty: null,
+    insert_replacement: false, insert_qty: null, retirement: false, retirement_qty: null, downtime_periods: [], no_blow_kit: false, no_blow_kit_qty: null,
+    short_stop_2_4: false, short_stop_2_4_qty: null, short_stop_6_plus: false, short_stop_6_plus_qty: null, welder_used: null, welder_type: '',
+    bore_used: null, bore_type: '', soil_type: '', bore_size_inches: '', bore_footage: '', crew_start_time: '', crew_end_time: '',
+    leak_repair_completed: null, fcc_name: '', fcc_signature: '', notes: ''
   }
   
   const [formData, setFormData] = useState(initialFormState)
 
-  const isForeman = profile?.role === 'foreman'
-  const userCrew = isForeman ? crews.find(c => c.foreman_user_id === profile.id) : null
-  const filteredReports = isForeman && userCrew 
-    ? leakReports.filter(r => r.crew_id === userCrew.id)
-    : leakReports
+  const userCrew = crews.find(c => c.foreman_user_id === profile.id)
+  const filteredReports = leakReports.filter(r => r.crew_id === userCrew?.id)
 
-  const readOnly = profile?.role === 'supervisor'
-
-  const updateForm = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
-  }
-
-  const addDowntimePeriod = () => {
-    setFormData(prev => ({
-      ...prev,
-      downtime_periods: [...prev.downtime_periods, { start: '', end: '' }]
-    }))
-  }
-
-  const updateDowntimePeriod = (index, field, value) => {
-    setFormData(prev => ({
-      ...prev,
-      downtime_periods: prev.downtime_periods.map((p, i) => 
-        i === index ? { ...p, [field]: value } : p
-      )
-    }))
-  }
-
-  const removeDowntimePeriod = (index) => {
-    setFormData(prev => ({
-      ...prev,
-      downtime_periods: prev.downtime_periods.filter((_, i) => i !== index)
-    }))
-  }
+  const updateForm = (field, value) => setFormData(prev => ({ ...prev, [field]: value }))
+  const addDowntimePeriod = () => setFormData(prev => ({ ...prev, downtime_periods: [...prev.downtime_periods, { start: '', end: '' }] }))
+  const updateDowntimePeriod = (index, field, value) => setFormData(prev => ({ ...prev, downtime_periods: prev.downtime_periods.map((p, i) => i === index ? { ...p, [field]: value } : p) }))
+  const removeDowntimePeriod = (index) => setFormData(prev => ({ ...prev, downtime_periods: prev.downtime_periods.filter((_, i) => i !== index) }))
 
   const handleSubmit = async () => {
     setLoading(true)
-    
-    const submitData = {
-      ...formData,
-      crew_id: userCrew?.id,
-      submitted_by: profile.id,
+    const submitData = { ...formData, crew_id: userCrew?.id, submitted_by: profile.id, status: 'submitted',
       downtime_periods: JSON.stringify(formData.downtime_periods),
       bore_size_inches: formData.bore_size_inches ? parseFloat(formData.bore_size_inches) : null,
       bore_footage: formData.bore_footage ? parseFloat(formData.bore_footage) : null,
     }
-    
-    const { error } = await supabase
-      .from('leak_reports')
-      .insert([submitData])
-    
-    if (!error) {
-      setFormData(initialFormState)
-      setShowAddModal(false)
-      onRefresh()
-    } else {
-      console.error('Error submitting report:', error)
-      alert('Error submitting report: ' + error.message)
-    }
+    const { error } = await supabase.from('leak_reports').insert([submitData])
+    if (!error) { setFormData(initialFormState); setShowAddModal(false); onRefresh() }
+    else alert('Error: ' + error.message)
     setLoading(false)
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-zinc-100">{isForeman ? 'Leak Reports' : 'All Leak Reports'}</h1>
-          <p className="text-zinc-500">{filteredReports.length} reports submitted</p>
-        </div>
-        {!readOnly && isForeman && (
-          <Button onClick={() => setShowAddModal(true)}>
-            <span className="flex items-center gap-2"><Icons.Plus /> New Report</span>
-          </Button>
-        )}
+        <div><h1 className="text-2xl font-bold text-zinc-100">Leak Reports</h1><p className="text-zinc-500">{filteredReports.length} reports submitted</p></div>
+        <Button onClick={() => setShowAddModal(true)}><span className="flex items-center gap-2"><Icons.Plus /> New Report</span></Button>
       </div>
 
       <Card>
@@ -1503,31 +1540,179 @@ const LeakReportsView = ({ leakReports, crews, profile, onRefresh }) => {
               <tr className="border-b border-zinc-800">
                 <th className="text-left py-3 px-4 text-sm font-medium text-zinc-400">Date</th>
                 <th className="text-left py-3 px-4 text-sm font-medium text-zinc-400">Leak #</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-zinc-400">Project #</th>
                 <th className="text-left py-3 px-4 text-sm font-medium text-zinc-400">Address</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-zinc-400">Type</th>
-                {!isForeman && <th className="text-left py-3 px-4 text-sm font-medium text-zinc-400">Crew</th>}
+                <th className="text-left py-3 px-4 text-sm font-medium text-zinc-400">Status</th>
                 <th className="text-right py-3 px-4 text-sm font-medium text-zinc-400">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredReports.map(report => {
+              {filteredReports.map(report => (
+                <tr key={report.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/30">
+                  <td className="py-3 px-4 text-zinc-200">{report.date}</td>
+                  <td className="py-3 px-4 text-zinc-200 font-medium">{report.leak_number || '-'}</td>
+                  <td className="py-3 px-4 text-zinc-400">{report.address || '-'}</td>
+                  <td className="py-3 px-4">
+                    <Badge variant={report.status === 'reviewed' ? 'success' : 'warning'}>
+                      {report.status === 'reviewed' ? 'Reviewed' : 'Pending'}
+                    </Badge>
+                  </td>
+                  <td className="py-3 px-4 text-right">
+                    <Button variant="ghost" size="sm" onClick={() => setViewingReport(report)}><span className="flex items-center gap-1"><Icons.Eye /> View</span></Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {filteredReports.length === 0 && <p className="text-zinc-500 text-center py-8">No reports submitted yet</p>}
+        </div>
+      </Card>
+
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6 sticky top-0 bg-zinc-900 py-2 -mt-2">
+              <h2 className="text-xl font-bold text-zinc-100">New Leak Report</h2>
+              <button onClick={() => setShowAddModal(false)} className="text-zinc-400 hover:text-zinc-200"><Icons.X /></button>
+            </div>
+            <LeakReportForm formData={formData} updateForm={updateForm} addDowntimePeriod={addDowntimePeriod} updateDowntimePeriod={updateDowntimePeriod} removeDowntimePeriod={removeDowntimePeriod} />
+            <div className="flex gap-3 pt-4 border-t border-zinc-800 sticky bottom-0 bg-zinc-900 py-4 -mb-5">
+              <Button variant="secondary" onClick={() => setShowAddModal(false)} className="flex-1">Cancel</Button>
+              <Button onClick={handleSubmit} loading={loading} className="flex-1">Submit Report</Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {viewingReport && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-zinc-100">Report Details</h2>
+              <button onClick={() => setViewingReport(null)} className="text-zinc-400 hover:text-zinc-200"><Icons.X /></button>
+            </div>
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 mb-4">
+                <Badge variant={viewingReport.status === 'reviewed' ? 'success' : 'warning'}>{viewingReport.status === 'reviewed' ? 'Reviewed' : 'Pending Review'}</Badge>
+                {viewingReport.rate_type && <Badge variant={viewingReport.rate_type === 'all_hourly' ? 'info' : viewingReport.rate_type === 'unit_rates' ? 'purple' : 'default'}>{viewingReport.rate_type === 'all_hourly' ? 'Hourly' : viewingReport.rate_type === 'unit_rates' ? 'Unit' : 'Both'}</Badge>}
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div><p className="text-sm text-zinc-500">Date</p><p className="text-zinc-200">{viewingReport.date}</p></div>
+                <div><p className="text-sm text-zinc-500">Leak #</p><p className="text-zinc-200">{viewingReport.leak_number || '-'}</p></div>
+                <div><p className="text-sm text-zinc-500">Project #</p><p className="text-zinc-200">{viewingReport.project_number || '-'}</p></div>
+                <div><p className="text-sm text-zinc-500">Supervisor</p><p className="text-zinc-200">{viewingReport.supervisor || '-'}</p></div>
+              </div>
+              <div><p className="text-sm text-zinc-500">Address</p><p className="text-zinc-200">{viewingReport.address || '-'}</p></div>
+              {viewingReport.notes && <div><p className="text-sm text-zinc-500">Notes</p><p className="text-zinc-300 bg-zinc-800/50 rounded-lg p-3">{viewingReport.notes}</p></div>}
+            </div>
+          </Card>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// =============================================
+// SUPERVISOR REVIEW VIEW
+// =============================================
+
+const SupervisorReviewView = ({ leakReports, crews, employees, profile, onRefresh }) => {
+  const [activeTab, setActiveTab] = useState('pending')
+  const [reviewingReport, setReviewingReport] = useState(null)
+  const [editMode, setEditMode] = useState(false)
+  const [formData, setFormData] = useState(null)
+  const [classification, setClassification] = useState('')
+  const [classificationNotes, setClassificationNotes] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const supervisorCrews = crews.filter(c => c.supervisor_id === profile.id)
+  const supervisorReports = leakReports.filter(r => supervisorCrews.some(c => c.id === r.crew_id))
+  
+  const pendingReports = supervisorReports.filter(r => r.status === 'submitted')
+  const reviewedReports = supervisorReports.filter(r => r.status === 'reviewed')
+
+  const displayReports = activeTab === 'pending' ? pendingReports : reviewedReports
+
+  const openReview = (report) => {
+    const parsed = { ...report, downtime_periods: typeof report.downtime_periods === 'string' ? JSON.parse(report.downtime_periods || '[]') : (report.downtime_periods || []) }
+    setReviewingReport(report)
+    setFormData(parsed)
+    setClassification(report.rate_type || '')
+    setClassificationNotes(report.rate_type_notes || '')
+    setEditMode(false)
+  }
+
+  const updateForm = (field, value) => setFormData(prev => ({ ...prev, [field]: value }))
+  const addDowntimePeriod = () => setFormData(prev => ({ ...prev, downtime_periods: [...(prev.downtime_periods || []), { start: '', end: '' }] }))
+  const updateDowntimePeriod = (index, field, value) => setFormData(prev => ({ ...prev, downtime_periods: (prev.downtime_periods || []).map((p, i) => i === index ? { ...p, [field]: value } : p) }))
+  const removeDowntimePeriod = (index) => setFormData(prev => ({ ...prev, downtime_periods: (prev.downtime_periods || []).filter((_, i) => i !== index) }))
+
+  const handleSubmitReview = async () => {
+    if (!classification) { alert('Please select a classification (Hourly, Unit, or Both)'); return }
+    if (classification === 'both' && !classificationNotes.trim()) { alert('Please explain why this is classified as Both'); return }
+    
+    setLoading(true)
+    const updateData = {
+      ...formData,
+      downtime_periods: JSON.stringify(formData.downtime_periods || []),
+      bore_size_inches: formData.bore_size_inches ? parseFloat(formData.bore_size_inches) : null,
+      bore_footage: formData.bore_footage ? parseFloat(formData.bore_footage) : null,
+      rate_type: classification,
+      rate_type_notes: classification === 'both' ? classificationNotes : null,
+      status: 'reviewed',
+      reviewed_by: profile.id,
+      reviewed_at: new Date().toISOString(),
+    }
+    
+    const { error } = await supabase.from('leak_reports').update(updateData).eq('id', reviewingReport.id)
+    if (!error) { setReviewingReport(null); setFormData(null); onRefresh() }
+    else alert('Error: ' + error.message)
+    setLoading(false)
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-zinc-100">Review Reports</h1>
+        <p className="text-zinc-500">Review and classify leak reports from your foremen</p>
+      </div>
+
+      <div className="flex gap-2">
+        <TabButton active={activeTab === 'pending'} onClick={() => setActiveTab('pending')} count={pendingReports.length}>Pending</TabButton>
+        <TabButton active={activeTab === 'reviewed'} onClick={() => setActiveTab('reviewed')} count={reviewedReports.length}>Reviewed</TabButton>
+      </div>
+
+      <Card>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-zinc-800">
+                <th className="text-left py-3 px-4 text-sm font-medium text-zinc-400">Date</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-zinc-400">Crew</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-zinc-400">Leak #</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-zinc-400">Address</th>
+                {activeTab === 'reviewed' && <th className="text-left py-3 px-4 text-sm font-medium text-zinc-400">Classification</th>}
+                <th className="text-right py-3 px-4 text-sm font-medium text-zinc-400">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {displayReports.map(report => {
                 const crew = crews.find(c => c.id === report.crew_id)
                 return (
-                  <tr key={report.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
+                  <tr key={report.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/30">
                     <td className="py-3 px-4 text-zinc-200">{report.date}</td>
+                    <td className="py-3 px-4 text-zinc-400">{crew?.name || '-'}</td>
                     <td className="py-3 px-4 text-zinc-200 font-medium">{report.leak_number || '-'}</td>
-                    <td className="py-3 px-4 text-zinc-400">{report.project_number || '-'}</td>
                     <td className="py-3 px-4 text-zinc-400">{report.address || '-'}</td>
-                    <td className="py-3 px-4">
-                      <Badge variant={report.job_type === 'grade_1' ? 'danger' : 'default'}>
-                        {report.job_type === 'grade_1' ? 'Grade 1' : report.job_type === 'laying_sod_cleanup' ? 'Cleanup' : 'Regular'}
-                      </Badge>
-                    </td>
-                    {!isForeman && <td className="py-3 px-4 text-zinc-400">{crew?.name || '-'}</td>}
+                    {activeTab === 'reviewed' && (
+                      <td className="py-3 px-4">
+                        <Badge variant={report.rate_type === 'all_hourly' ? 'info' : report.rate_type === 'unit_rates' ? 'purple' : 'default'}>
+                          {report.rate_type === 'all_hourly' ? 'Hourly' : report.rate_type === 'unit_rates' ? 'Unit' : 'Both'}
+                        </Badge>
+                      </td>
+                    )}
                     <td className="py-3 px-4 text-right">
-                      <Button variant="ghost" size="sm" onClick={() => setViewingReport(report)}>
-                        <span className="flex items-center gap-1"><Icons.Eye /> View</span>
+                      <Button variant={activeTab === 'pending' ? 'primary' : 'ghost'} size="sm" onClick={() => openReview(report)}>
+                        <span className="flex items-center gap-1">{activeTab === 'pending' ? <><Icons.Edit /> Review</> : <><Icons.Eye /> View</>}</span>
                       </Button>
                     </td>
                   </tr>
@@ -1535,437 +1720,168 @@ const LeakReportsView = ({ leakReports, crews, profile, onRefresh }) => {
               })}
             </tbody>
           </table>
-          {filteredReports.length === 0 && (
-            <p className="text-zinc-500 text-center py-8">No leak reports submitted yet</p>
-          )}
+          {displayReports.length === 0 && <p className="text-zinc-500 text-center py-8">{activeTab === 'pending' ? 'No reports pending review' : 'No reviewed reports yet'}</p>}
         </div>
       </Card>
 
-      {/* New Report Modal */}
-      {showAddModal && (
+      {reviewingReport && formData && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6 sticky top-0 bg-zinc-900 py-2 -mt-2">
-              <h2 className="text-xl font-bold text-zinc-100">New Leak Report</h2>
-              <button onClick={() => setShowAddModal(false)} className="text-zinc-400 hover:text-zinc-200">
-                <Icons.X />
-              </button>
-            </div>
-            
-            <div className="space-y-6">
-              {/* Header Section */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-amber-400 border-b border-zinc-800 pb-2">Basic Information</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <Input
-                    label="Date"
-                    type="date"
-                    value={formData.date}
-                    onChange={(e) => updateForm('date', e.target.value)}
-                  />
-                  <Input
-                    label="Supervisor"
-                    value={formData.supervisor}
-                    onChange={(e) => updateForm('supervisor', e.target.value)}
-                  />
-                  <Input
-                    label="Project #"
-                    value={formData.project_number}
-                    onChange={(e) => updateForm('project_number', e.target.value)}
-                  />
-                  <Input
-                    label="Leak #"
-                    value={formData.leak_number}
-                    onChange={(e) => updateForm('leak_number', e.target.value)}
-                  />
-                </div>
-                <Input
-                  label="Address"
-                  value={formData.address}
-                  onChange={(e) => updateForm('address', e.target.value)}
-                  placeholder="Full address"
-                />
+            <div className="flex items-center justify-between mb-6 sticky top-0 bg-zinc-900 py-2 -mt-2 z-10">
+              <div>
+                <h2 className="text-xl font-bold text-zinc-100">Review Report</h2>
+                <p className="text-sm text-zinc-500">{crews.find(c => c.id === reviewingReport.crew_id)?.name} • {reviewingReport.date}</p>
               </div>
-
-              {/* Job Type */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-amber-400 border-b border-zinc-800 pb-2">Job Type</h3>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { value: 'regular_leak', label: 'Regular Leak' },
-                    { value: 'grade_1', label: 'Grade 1' },
-                    { value: 'laying_sod_cleanup', label: 'Laying Sod/Cleanup or Other Work' }
-                  ].map(type => (
-                    <button
-                      key={type.value}
-                      type="button"
-                      onClick={() => updateForm('job_type', type.value)}
-                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                        formData.job_type === type.value
-                          ? 'bg-amber-500 text-zinc-900'
-                          : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-                      }`}
-                    >
-                      {type.label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Grade 1 specific fields */}
-                {(formData.job_type === 'grade_1' || formData.crew_called_off_to_grade_1 || formData.leak_turned_into_grade_1) && (
-                  <div className="bg-red-900/20 border border-red-800 rounded-lg p-4 space-y-3">
-                    <Toggle
-                      label="Crew Called Off of Leak to go to GRADE 1"
-                      checked={formData.crew_called_off_to_grade_1}
-                      onChange={(v) => updateForm('crew_called_off_to_grade_1', v)}
-                    />
-                    {formData.crew_called_off_to_grade_1 && (
-                      <TimeInput
-                        label="Time Crew Was Called OFF"
-                        value={formData.time_called_off_to_grade_1}
-                        onChange={(v) => updateForm('time_called_off_to_grade_1', v)}
-                      />
-                    )}
-                    <Toggle
-                      label="Leak Turned into GRADE 1"
-                      checked={formData.leak_turned_into_grade_1}
-                      onChange={(v) => updateForm('leak_turned_into_grade_1', v)}
-                    />
-                    {formData.leak_turned_into_grade_1 && (
-                      <TimeInput
-                        label="Time Leak Turned into GRADE 1"
-                        value={formData.time_leak_turned_grade_1}
-                        onChange={(v) => updateForm('time_leak_turned_grade_1', v)}
-                      />
-                    )}
-                  </div>
+              <div className="flex items-center gap-2">
+                {reviewingReport.status === 'submitted' && (
+                  <Button variant="secondary" size="sm" onClick={() => setEditMode(!editMode)}>
+                    {editMode ? 'View Only' : 'Edit'}
+                  </Button>
                 )}
+                <button onClick={() => { setReviewingReport(null); setFormData(null) }} className="text-zinc-400 hover:text-zinc-200"><Icons.X /></button>
               </div>
+            </div>
 
-              {/* Superintendent Use Only */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-amber-400 border-b border-zinc-800 pb-2">Superintendent Use Only</h3>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { value: 'all_hourly', label: 'All Hourly Rate' },
-                    { value: 'unit_rates', label: 'Unit Rates' },
-                    { value: 'partially_hourly', label: 'Partially Hourly' }
-                  ].map(type => (
-                    <button
-                      key={type.value}
-                      type="button"
-                      onClick={() => updateForm('rate_type', formData.rate_type === type.value ? '' : type.value)}
-                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                        formData.rate_type === type.value
-                          ? 'bg-amber-500 text-zinc-900'
-                          : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-                      }`}
-                    >
-                      {type.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+            <LeakReportForm formData={formData} updateForm={updateForm} addDowntimePeriod={addDowntimePeriod} updateDowntimePeriod={updateDowntimePeriod} removeDowntimePeriod={removeDowntimePeriod} disabled={!editMode} />
 
-              {/* Regular Leak Questions */}
-              {formData.job_type === 'regular_leak' && (
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-amber-400 border-b border-zinc-800 pb-2">Regular Leak Details</h3>
-                  
-                  <YesNoToggle label="Leak Located?" value={formData.leak_located} onChange={(v) => updateForm('leak_located', v)} />
-                  <YesNoToggle label="Leak Located before arrival?" value={formData.leak_located_before_arrival} onChange={(v) => updateForm('leak_located_before_arrival', v)} />
-                  
-                  {formData.leak_located === false && (
-                    <YesNoToggle label="Did it take over 25 minutes to locate?" value={formData.took_over_25_min_to_locate} onChange={(v) => updateForm('took_over_25_min_to_locate', v)} />
-                  )}
-
-                  <div className="grid grid-cols-2 gap-4 py-3">
-                    <div>
-                      <p className="text-sm text-zinc-400 mb-2">Type of Leak</p>
-                      <div className="flex gap-2">
-                        {['main', 'service'].map(t => (
-                          <button
-                            key={t}
-                            type="button"
-                            onClick={() => updateForm('leak_type', formData.leak_type === t ? '' : t)}
-                            className={`px-3 py-1.5 rounded font-medium capitalize ${
-                              formData.leak_type === t ? 'bg-amber-500 text-zinc-900' : 'bg-zinc-800 text-zinc-400'
-                            }`}
-                          >
-                            {t}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-sm text-zinc-400 mb-2">Pipe Type</p>
-                      <div className="flex gap-2">
-                        {['steel', 'poly'].map(t => (
-                          <button
-                            key={t}
-                            type="button"
-                            onClick={() => updateForm('pipe_type', formData.pipe_type === t ? '' : t)}
-                            className={`px-3 py-1.5 rounded font-medium capitalize ${
-                              formData.pipe_type === t ? 'bg-amber-500 text-zinc-900' : 'bg-zinc-800 text-zinc-400'
-                            }`}
-                          >
-                            {t}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <p className="text-sm text-zinc-400">Type of Replacement</p>
-                    <CheckboxWithQty label="Short Side" checked={formData.short_side} onCheckChange={(v) => updateForm('short_side', v)} qty={formData.short_side_qty} onQtyChange={(v) => updateForm('short_side_qty', v)} />
-                    <CheckboxWithQty label="Long Side" checked={formData.long_side} onCheckChange={(v) => updateForm('long_side', v)} qty={formData.long_side_qty} onQtyChange={(v) => updateForm('long_side_qty', v)} />
-                    <CheckboxWithQty label="Insert" checked={formData.insert_replacement} onCheckChange={(v) => updateForm('insert_replacement', v)} qty={formData.insert_qty} onQtyChange={(v) => updateForm('insert_qty', v)} />
-                    <CheckboxWithQty label="Retirement" checked={formData.retirement} onCheckChange={(v) => updateForm('retirement', v)} qty={formData.retirement_qty} onQtyChange={(v) => updateForm('retirement_qty', v)} />
-                  </div>
-
-                  <YesNoToggle label="Section out main or any other means of repair?" value={formData.section_out_main} onChange={(v) => updateForm('section_out_main', v)} />
-                  <YesNoToggle label="Excessive Haul Off?" value={formData.excessive_haul_off} onChange={(v) => updateForm('excessive_haul_off', v)} />
-                  <YesNoToggle label="Excessive restoration?" value={formData.excessive_restoration} onChange={(v) => updateForm('excessive_restoration', v)} />
-                  <YesNoToggle label="Downtown area with extensive paving?" value={formData.downtown_extensive_paving} onChange={(v) => updateForm('downtown_extensive_paving', v)} />
-                  <YesNoToggle label="Increased Traffic control?" value={formData.increased_traffic_control} onChange={(v) => updateForm('increased_traffic_control', v)} />
-                  <YesNoToggle label="Rock Found in Bellhole?" value={formData.rock_in_bellhole} onChange={(v) => updateForm('rock_in_bellhole', v)} />
-                  <YesNoToggle label="Street Plates Used?" value={formData.street_plates_used} onChange={(v) => updateForm('street_plates_used', v)} />
-                  <YesNoToggle label="Vac Truck Used?" value={formData.vac_truck_used} onChange={(v) => updateForm('vac_truck_used', v)} />
-                </div>
-              )}
-
-              {/* Downtime Due to Atmos */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-amber-400 border-b border-zinc-800 pb-2">Downtime Due to Atmos</h3>
-                {formData.downtime_periods.map((period, index) => (
-                  <div key={index} className="flex items-center gap-3 bg-zinc-800/50 p-3 rounded-lg">
-                    <TimeInput label="Start" value={period.start} onChange={(v) => updateDowntimePeriod(index, 'start', v)} />
-                    <TimeInput label="End" value={period.end} onChange={(v) => updateDowntimePeriod(index, 'end', v)} />
-                    <button
-                      type="button"
-                      onClick={() => removeDowntimePeriod(index)}
-                      className="p-2 text-red-400 hover:bg-zinc-700 rounded mt-6"
-                    >
-                      <Icons.Trash />
-                    </button>
-                  </div>
+            {/* Classification Section - Supervisor Only */}
+            <div className="space-y-4 mt-6 pt-6 border-t-2 border-amber-500/50">
+              <h3 className="text-lg font-semibold text-amber-400">Supervisor Classification</h3>
+              <p className="text-sm text-zinc-400">Select how this job should be billed:</p>
+              <div className="flex flex-wrap gap-2">
+                {[{ value: 'all_hourly', label: 'Hourly' }, { value: 'unit_rates', label: 'Unit' }, { value: 'both', label: 'Both' }].map(opt => (
+                  <button key={opt.value} type="button" onClick={() => setClassification(opt.value)}
+                    className={`px-6 py-3 rounded-lg font-medium transition-colors ${classification === opt.value 
+                      ? opt.value === 'all_hourly' ? 'bg-sky-500 text-white' : opt.value === 'unit_rates' ? 'bg-purple-500 text-white' : 'bg-amber-500 text-zinc-900'
+                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>
+                    {opt.label}
+                  </button>
                 ))}
-                <Button variant="secondary" size="sm" onClick={addDowntimePeriod}>
-                  <span className="flex items-center gap-2"><Icons.Plus /> Add Downtime Period</span>
+              </div>
+              {classification === 'both' && (
+                <Textarea label="Explain why both (required)" value={classificationNotes} onChange={(e) => setClassificationNotes(e.target.value)} placeholder="Explain why this job requires both hourly and unit rates..." rows={3} />
+              )}
+            </div>
+
+            {reviewingReport.status === 'submitted' && (
+              <div className="flex gap-3 pt-4 border-t border-zinc-800 sticky bottom-0 bg-zinc-900 py-4 -mb-5">
+                <Button variant="secondary" onClick={() => { setReviewingReport(null); setFormData(null) }} className="flex-1">Cancel</Button>
+                <Button variant="success" onClick={handleSubmitReview} loading={loading} className="flex-1">
+                  <span className="flex items-center gap-2"><Icons.Check /> Submit Review</span>
                 </Button>
               </div>
+            )}
 
-              {/* Adders */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-amber-400 border-b border-zinc-800 pb-2">Adders Used</h3>
-                <CheckboxWithQty label="NoBlowKit" checked={formData.no_blow_kit} onCheckChange={(v) => updateForm('no_blow_kit', v)} qty={formData.no_blow_kit_qty} onQtyChange={(v) => updateForm('no_blow_kit_qty', v)} />
-                <CheckboxWithQty label='2"-4" Short Stop' checked={formData.short_stop_2_4} onCheckChange={(v) => updateForm('short_stop_2_4', v)} qty={formData.short_stop_2_4_qty} onQtyChange={(v) => updateForm('short_stop_2_4_qty', v)} />
-                <CheckboxWithQty label='6"+ Short Stop' checked={formData.short_stop_6_plus} onCheckChange={(v) => updateForm('short_stop_6_plus', v)} qty={formData.short_stop_6_plus_qty} onQtyChange={(v) => updateForm('short_stop_6_plus_qty', v)} />
+            {reviewingReport.status === 'reviewed' && (
+              <div className="mt-4 p-4 bg-emerald-900/20 border border-emerald-800 rounded-lg">
+                <p className="text-emerald-400 font-medium">✓ This report has been reviewed</p>
+                <p className="text-sm text-zinc-400 mt-1">Reviewed on {new Date(reviewingReport.reviewed_at).toLocaleDateString()}</p>
               </div>
-
-              {/* Welder */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-amber-400 border-b border-zinc-800 pb-2">Welder</h3>
-                <YesNoToggle label="Welder Used?" value={formData.welder_used} onChange={(v) => updateForm('welder_used', v)} />
-                {formData.welder_used && (
-                  <div className="flex gap-2">
-                    {['bobcat', 'subbed_out'].map(t => (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() => updateForm('welder_type', t)}
-                        className={`px-3 py-1.5 rounded font-medium ${
-                          formData.welder_type === t ? 'bg-amber-500 text-zinc-900' : 'bg-zinc-800 text-zinc-400'
-                        }`}
-                      >
-                        {t === 'bobcat' ? 'Bobcat Welder' : 'Subbed Out Welder'}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Bore */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-amber-400 border-b border-zinc-800 pb-2">Bore</h3>
-                <YesNoToggle label="Bore Used?" value={formData.bore_used} onChange={(v) => updateForm('bore_used', v)} />
-                {formData.bore_used && (
-                  <>
-                    <div className="flex gap-2">
-                      {['bobcat', 'subbed_out'].map(t => (
-                        <button
-                          key={t}
-                          type="button"
-                          onClick={() => updateForm('bore_type', t)}
-                          className={`px-3 py-1.5 rounded font-medium ${
-                            formData.bore_type === t ? 'bg-amber-500 text-zinc-900' : 'bg-zinc-800 text-zinc-400'
-                          }`}
-                        >
-                          {t === 'bobcat' ? 'Bobcat Bore' : 'Subbed Out Bore'}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex gap-2">
-                      <p className="text-sm text-zinc-400 self-center">Soil Type:</p>
-                      {['dirt', 'rock'].map(t => (
-                        <button
-                          key={t}
-                          type="button"
-                          onClick={() => updateForm('soil_type', t)}
-                          className={`px-3 py-1.5 rounded font-medium capitalize ${
-                            formData.soil_type === t ? 'bg-amber-500 text-zinc-900' : 'bg-zinc-800 text-zinc-400'
-                          }`}
-                        >
-                          {t}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <Input
-                        label="Bore Size (inches)"
-                        type="number"
-                        value={formData.bore_size_inches}
-                        onChange={(e) => updateForm('bore_size_inches', e.target.value)}
-                        placeholder="e.g., 4"
-                      />
-                      <Input
-                        label="Bore Footage (ft)"
-                        type="number"
-                        value={formData.bore_footage}
-                        onChange={(e) => updateForm('bore_footage', e.target.value)}
-                        placeholder="e.g., 50"
-                      />
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* Crew Times */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-amber-400 border-b border-zinc-800 pb-2">Crew Times</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <TimeInput label="Crew Start Time" value={formData.crew_start_time} onChange={(v) => updateForm('crew_start_time', v)} />
-                  <TimeInput label="Crew End Time" value={formData.crew_end_time} onChange={(v) => updateForm('crew_end_time', v)} />
-                </div>
-              </div>
-
-              {/* Completion */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-amber-400 border-b border-zinc-800 pb-2">Completion</h3>
-                <YesNoToggle label="Leak Repair Completed?" value={formData.leak_repair_completed} onChange={(v) => updateForm('leak_repair_completed', v)} />
-              </div>
-
-              {/* FCC */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-amber-400 border-b border-zinc-800 pb-2">FCC Information</h3>
-                <Input
-                  label="FCC Name"
-                  value={formData.fcc_name}
-                  onChange={(e) => updateForm('fcc_name', e.target.value)}
-                />
-                <Input
-                  label="FCC Signature"
-                  value={formData.fcc_signature}
-                  onChange={(e) => updateForm('fcc_signature', e.target.value)}
-                  placeholder="Type name as signature"
-                />
-              </div>
-
-              {/* Notes */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-amber-400 border-b border-zinc-800 pb-2">Notes</h3>
-                <Textarea
-                  value={formData.notes}
-                  onChange={(e) => updateForm('notes', e.target.value)}
-                  placeholder="Any additional notes..."
-                  rows={4}
-                />
-              </div>
-
-              {/* Submit */}
-              <div className="flex gap-3 pt-4 border-t border-zinc-800 sticky bottom-0 bg-zinc-900 py-4 -mb-5">
-                <Button variant="secondary" onClick={() => setShowAddModal(false)} className="flex-1">Cancel</Button>
-                <Button onClick={handleSubmit} loading={loading} className="flex-1">Submit Report</Button>
-              </div>
-            </div>
+            )}
           </Card>
         </div>
       )}
+    </div>
+  )
+}
 
-      {/* View Report Modal */}
+// =============================================
+// ADMIN LEAK REPORTS VIEW
+// =============================================
+
+const AdminLeakReportsView = ({ leakReports, crews, employees, profiles, onRefresh }) => {
+  const [activeTab, setActiveTab] = useState('all')
+  const [viewingReport, setViewingReport] = useState(null)
+
+  const allReports = leakReports
+  const pendingReports = leakReports.filter(r => r.status === 'submitted')
+  const hourlyReports = leakReports.filter(r => r.rate_type === 'all_hourly')
+  const unitReports = leakReports.filter(r => r.rate_type === 'unit_rates')
+  const bothReports = leakReports.filter(r => r.rate_type === 'both')
+
+  const displayReports = activeTab === 'all' ? allReports : activeTab === 'pending' ? pendingReports : activeTab === 'hourly' ? hourlyReports : activeTab === 'unit' ? unitReports : bothReports
+
+  return (
+    <div className="space-y-6">
+      <div><h1 className="text-2xl font-bold text-zinc-100">All Leak Reports</h1><p className="text-zinc-500">{leakReports.length} total reports</p></div>
+
+      <div className="flex flex-wrap gap-2">
+        <TabButton active={activeTab === 'all'} onClick={() => setActiveTab('all')} count={allReports.length}>All</TabButton>
+        <TabButton active={activeTab === 'pending'} onClick={() => setActiveTab('pending')} count={pendingReports.length}>Pending</TabButton>
+        <TabButton active={activeTab === 'hourly'} onClick={() => setActiveTab('hourly')} count={hourlyReports.length}>Hourly</TabButton>
+        <TabButton active={activeTab === 'unit'} onClick={() => setActiveTab('unit')} count={unitReports.length}>Unit</TabButton>
+        <TabButton active={activeTab === 'both'} onClick={() => setActiveTab('both')} count={bothReports.length}>Both</TabButton>
+      </div>
+
+      <Card>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-zinc-800">
+                <th className="text-left py-3 px-4 text-sm font-medium text-zinc-400">Date</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-zinc-400">Crew</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-zinc-400">Leak #</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-zinc-400">Address</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-zinc-400">Status</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-zinc-400">Classification</th>
+                <th className="text-right py-3 px-4 text-sm font-medium text-zinc-400">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {displayReports.map(report => {
+                const crew = crews.find(c => c.id === report.crew_id)
+                const reviewer = profiles?.find(p => p.id === report.reviewed_by)
+                return (
+                  <tr key={report.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/30">
+                    <td className="py-3 px-4 text-zinc-200">{report.date}</td>
+                    <td className="py-3 px-4 text-zinc-400">{crew?.name || '-'}</td>
+                    <td className="py-3 px-4 text-zinc-200 font-medium">{report.leak_number || '-'}</td>
+                    <td className="py-3 px-4 text-zinc-400 max-w-[200px] truncate">{report.address || '-'}</td>
+                    <td className="py-3 px-4">
+                      <Badge variant={report.status === 'reviewed' ? 'success' : 'warning'}>{report.status === 'reviewed' ? 'Reviewed' : 'Pending'}</Badge>
+                    </td>
+                    <td className="py-3 px-4">
+                      {report.rate_type ? (
+                        <Badge variant={report.rate_type === 'all_hourly' ? 'info' : report.rate_type === 'unit_rates' ? 'purple' : 'default'}>
+                          {report.rate_type === 'all_hourly' ? 'Hourly' : report.rate_type === 'unit_rates' ? 'Unit' : 'Both'}
+                        </Badge>
+                      ) : '-'}
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <Button variant="ghost" size="sm" onClick={() => setViewingReport(report)}><span className="flex items-center gap-1"><Icons.Eye /> View</span></Button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          {displayReports.length === 0 && <p className="text-zinc-500 text-center py-8">No reports found</p>}
+        </div>
+      </Card>
+
       {viewingReport && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-zinc-100">Leak Report Details</h2>
-              <button onClick={() => setViewingReport(null)} className="text-zinc-400 hover:text-zinc-200">
-                <Icons.X />
-              </button>
+              <div>
+                <h2 className="text-xl font-bold text-zinc-100">Report Details</h2>
+                <p className="text-sm text-zinc-500">{crews.find(c => c.id === viewingReport.crew_id)?.name} • {viewingReport.date}</p>
+              </div>
+              <button onClick={() => setViewingReport(null)} className="text-zinc-400 hover:text-zinc-200"><Icons.X /></button>
             </div>
-            
+            <div className="flex flex-wrap gap-2 mb-4">
+              <Badge variant={viewingReport.status === 'reviewed' ? 'success' : 'warning'}>{viewingReport.status === 'reviewed' ? 'Reviewed' : 'Pending'}</Badge>
+              {viewingReport.rate_type && <Badge variant={viewingReport.rate_type === 'all_hourly' ? 'info' : viewingReport.rate_type === 'unit_rates' ? 'purple' : 'default'}>{viewingReport.rate_type === 'all_hourly' ? 'Hourly' : viewingReport.rate_type === 'unit_rates' ? 'Unit' : 'Both'}</Badge>}
+            </div>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-zinc-500">Date</p>
-                  <p className="text-zinc-200">{viewingReport.date}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-zinc-500">Leak #</p>
-                  <p className="text-zinc-200">{viewingReport.leak_number || '-'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-zinc-500">Project #</p>
-                  <p className="text-zinc-200">{viewingReport.project_number || '-'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-zinc-500">Supervisor</p>
-                  <p className="text-zinc-200">{viewingReport.supervisor || '-'}</p>
-                </div>
+                <div><p className="text-sm text-zinc-500">Leak #</p><p className="text-zinc-200">{viewingReport.leak_number || '-'}</p></div>
+                <div><p className="text-sm text-zinc-500">Project #</p><p className="text-zinc-200">{viewingReport.project_number || '-'}</p></div>
               </div>
-
-              <div>
-                <p className="text-sm text-zinc-500">Address</p>
-                <p className="text-zinc-200">{viewingReport.address || '-'}</p>
-              </div>
-
-              <div>
-                <p className="text-sm text-zinc-500">Job Type</p>
-                <Badge variant={viewingReport.job_type === 'grade_1' ? 'danger' : 'default'}>
-                  {viewingReport.job_type === 'grade_1' ? 'Grade 1' : viewingReport.job_type === 'laying_sod_cleanup' ? 'Cleanup/Other' : 'Regular Leak'}
-                </Badge>
-              </div>
-
-              {viewingReport.crew_start_time && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-zinc-500">Crew Start</p>
-                    <p className="text-zinc-200">{viewingReport.crew_start_time}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-zinc-500">Crew End</p>
-                    <p className="text-zinc-200">{viewingReport.crew_end_time || '-'}</p>
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <p className="text-sm text-zinc-500">Leak Repair Completed</p>
-                <Badge variant={viewingReport.leak_repair_completed ? 'success' : 'warning'}>
-                  {viewingReport.leak_repair_completed ? 'Yes' : 'No'}
-                </Badge>
-              </div>
-
-              {viewingReport.notes && (
-                <div>
-                  <p className="text-sm text-zinc-500 mb-1">Notes</p>
-                  <p className="text-zinc-300 bg-zinc-800/50 rounded-lg p-3">{viewingReport.notes}</p>
-                </div>
-              )}
-
-              <div className="text-xs text-zinc-500 pt-4 border-t border-zinc-800">
-                Submitted: {new Date(viewingReport.created_at).toLocaleString()}
-              </div>
+              <div><p className="text-sm text-zinc-500">Address</p><p className="text-zinc-200">{viewingReport.address || '-'}</p></div>
+              {viewingReport.rate_type_notes && <div><p className="text-sm text-zinc-500">Classification Notes</p><p className="text-zinc-300 bg-zinc-800/50 rounded-lg p-3">{viewingReport.rate_type_notes}</p></div>}
+              {viewingReport.notes && <div><p className="text-sm text-zinc-500">Report Notes</p><p className="text-zinc-300 bg-zinc-800/50 rounded-lg p-3">{viewingReport.notes}</p></div>}
+              {viewingReport.reviewed_by && <div className="text-sm text-zinc-500 pt-4 border-t border-zinc-800">Reviewed by {profiles?.find(p => p.id === viewingReport.reviewed_by)?.name || 'Unknown'} on {new Date(viewingReport.reviewed_at).toLocaleDateString()}</div>}
             </div>
           </Card>
         </div>
@@ -1988,92 +1904,58 @@ export default function App() {
   const [crews, setCrews] = useState([])
   const [equipment, setEquipment] = useState([])
   const [leakReports, setLeakReports] = useState([])
+  const [profiles, setProfiles] = useState([])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
-      if (session) {
-        fetchProfile(session.user.id)
-      } else {
-        setLoading(false)
-      }
+      if (session) fetchProfile(session.user.id)
+      else setLoading(false)
     })
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
-      if (session) {
-        fetchProfile(session.user.id)
-      } else {
-        setProfile(null)
-        setLoading(false)
-      }
+      if (session) fetchProfile(session.user.id)
+      else { setProfile(null); setLoading(false) }
     })
-
     return () => subscription.unsubscribe()
   }, [])
 
   const fetchProfile = async (userId) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
-    
-    if (data) {
-      setProfile(data)
-      fetchAllData()
-    }
+    const { data } = await supabase.from('profiles').select('*').eq('id', userId).single()
+    if (data) { setProfile(data); fetchAllData() }
     setLoading(false)
   }
 
   const fetchAllData = async () => {
-    const [employeesRes, crewsRes, equipmentRes, leakReportsRes] = await Promise.all([
+    const [employeesRes, crewsRes, equipmentRes, leakReportsRes, profilesRes] = await Promise.all([
       supabase.from('employees').select('*').order('name'),
-      supabase.from('crews').select(`
-        *,
-        foreman:employees!crews_foreman_id_fkey(id, name, phone),
-        crew_members(employee_id)
-      `),
+      supabase.from('crews').select('*, foreman:employees!crews_foreman_id_fkey(id, name, phone), crew_members(employee_id)'),
       supabase.from('equipment').select('*').order('created_at', { ascending: false }),
-      supabase.from('leak_reports').select('*').order('date', { ascending: false })
+      supabase.from('leak_reports').select('*').order('date', { ascending: false }),
+      supabase.from('profiles').select('*')
     ])
-
     if (employeesRes.data) setEmployees(employeesRes.data)
     if (crewsRes.data) setCrews(crewsRes.data)
     if (equipmentRes.data) setEquipment(equipmentRes.data)
     if (leakReportsRes.data) setLeakReports(leakReportsRes.data)
+    if (profilesRes.data) setProfiles(profilesRes.data)
   }
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
-    setCurrentView('dashboard')
-  }
+  const handleLogout = async () => { await supabase.auth.signOut(); setCurrentView('dashboard') }
 
-  if (loading) {
-    return <LoadingScreen />
-  }
-
-  if (!session) {
-    return <LoginScreen />
-  }
+  if (loading) return <LoadingScreen />
+  if (!session) return <LoginScreen />
 
   const renderView = () => {
     switch (currentView) {
-      case 'dashboard':
-        return <Dashboard profile={profile} crews={crews} employees={employees} equipment={equipment} leakReports={leakReports} />
-      case 'employees':
-        return <EmployeesView employees={employees} onRefresh={fetchAllData} readOnly={profile?.role !== 'admin'} />
-      case 'crews':
-      case 'my-crew':
-        return <CrewsView crews={crews} employees={employees} profile={profile} onRefresh={fetchAllData} />
-      case 'equipment':
-      case 'my-equipment':
-        return <EquipmentView equipment={equipment} crews={crews} profile={profile} onRefresh={fetchAllData} />
-      case 'leak-reports':
-      case 'my-leak-reports':
-        return <LeakReportsView leakReports={leakReports} crews={crews} profile={profile} onRefresh={fetchAllData} />
-      default:
-        return <Dashboard profile={profile} crews={crews} employees={employees} equipment={equipment} leakReports={leakReports} />
+      case 'dashboard': return <Dashboard profile={profile} crews={crews} employees={employees} equipment={equipment} leakReports={leakReports} />
+      case 'employees': return <EmployeesView employees={employees} onRefresh={fetchAllData} readOnly={profile?.role !== 'admin'} />
+      case 'crews': case 'my-crew': return <CrewsView crews={crews} employees={employees} profiles={profiles} profile={profile} onRefresh={fetchAllData} />
+      case 'equipment': case 'my-equipment': return <EquipmentView equipment={equipment} crews={crews} profile={profile} onRefresh={fetchAllData} />
+      case 'my-leak-reports': return <ForemanLeakReportsView leakReports={leakReports} crews={crews} profile={profile} onRefresh={fetchAllData} />
+      case 'review-reports': return <SupervisorReviewView leakReports={leakReports} crews={crews} employees={employees} profile={profile} onRefresh={fetchAllData} />
+      case 'leak-reports': return <AdminLeakReportsView leakReports={leakReports} crews={crews} employees={employees} profiles={profiles} onRefresh={fetchAllData} />
+      default: return <Dashboard profile={profile} crews={crews} employees={employees} equipment={equipment} leakReports={leakReports} />
     }
   }
 
@@ -2082,15 +1964,8 @@ export default function App() {
       <div className="min-h-screen bg-zinc-950">
         <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-zinc-900 via-zinc-950 to-zinc-950 pointer-events-none" />
         <div className="relative z-10">
-          <Navigation 
-            currentView={currentView} 
-            setCurrentView={setCurrentView} 
-            profile={profile}
-            onLogout={handleLogout}
-          />
-          <main className="max-w-7xl mx-auto px-4 py-6">
-            {renderView()}
-          </main>
+          <Navigation currentView={currentView} setCurrentView={setCurrentView} profile={profile} onLogout={handleLogout} />
+          <main className="max-w-7xl mx-auto px-4 py-6">{renderView()}</main>
         </div>
       </div>
     </AuthContext.Provider>
