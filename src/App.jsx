@@ -374,27 +374,26 @@ const LoginScreen = () => {
 // =============================================
 
 const Navigation = ({ currentView, setCurrentView, profile, onLogout }) => {
-  const navItems = {
-    admin: [
-      { id: 'dashboard', label: 'Dashboard', icon: Icons.Home },
-      { id: 'employees', label: 'Employees', icon: Icons.Users },
-      { id: 'crews', label: 'All Crews', icon: Icons.Users },
-      { id: 'equipment', label: 'All Equipment', icon: Icons.Truck },
-      { id: 'leak-reports', label: 'Leak Reports', icon: Icons.Document },
-    ],
-    supervisor: [
-      { id: 'dashboard', label: 'Dashboard', icon: Icons.Home },
-      { id: 'crews', label: 'My Crews', icon: Icons.Users },
-      { id: 'review-reports', label: 'Review Reports', icon: Icons.Document },
-    ],
-    foreman: [
-      { id: 'dashboard', label: 'Dashboard', icon: Icons.Home },
-      { id: 'my-crew', label: 'My Crew', icon: Icons.Users },
-      { id: 'my-equipment', label: 'Equipment', icon: Icons.Truck },
-      { id: 'my-leak-reports', label: 'Leak Reports', icon: Icons.Document },
-    ],
-  }
-
+const navItems = {
+  admin: [
+    { id: 'dashboard', label: 'Dashboard', icon: Icons.Home },
+    { id: 'employees', label: 'Employees', icon: Icons.Users },
+    { id: 'crews', label: 'All Crews', icon: Icons.Users },
+    { id: 'equipment', label: 'All Equipment', icon: Icons.Truck },
+    { id: 'leak-reports', label: 'Leak Reports', icon: Icons.Document },
+  ],
+  supervisor: [
+    { id: 'dashboard', label: 'Dashboard', icon: Icons.Home },
+    { id: 'crews', label: 'My Crews', icon: Icons.Users },
+    { id: 'review-reports', label: 'Review Reports', icon: Icons.Document },
+  ],
+  foreman: [
+    { id: 'dashboard', label: 'Dashboard', icon: Icons.Home },
+    { id: 'my-crew', label: 'My Crew', icon: Icons.Users },
+    { id: 'my-equipment', label: 'Equipment', icon: Icons.Truck },
+    { id: 'my-leak-reports', label: 'Leak Reports', icon: Icons.Document },
+  ],
+}
   const items = navItems[profile?.role] || []
 
   return (
