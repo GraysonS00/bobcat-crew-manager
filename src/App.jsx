@@ -1252,6 +1252,29 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh }) => {
   const [loading, setLoading] = useState(false)
   const [showAddCrew, setShowAddCrew] = useState(false)
   const [newCrewName, setNewCrewName] = useState('')
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
+
+// Add this helper function before the handleAdd function:
+const getEmployeeWarnings = (employee) => {
+  const warnings = []
+  
+  // Check if they're assigned to any crews as a member
+  const crewMemberships = crews?.filter(c => 
+    c.crew_members?.some(m => m.employee_id === employee.id)
+  ) || []
+  
+  // Check if they're a foreman of any crew
+  const foremanOf = crews?.filter(c => c.foreman_id === employee.id) || []
+  
+  if (crewMemberships.length > 0) {
+    warnings.push(`Assigned to ${crewMemberships.length} crew${crewMemberships.length > 1 ? 's' : ''}`)
+  }
+  if (foremanOf.length > 0) {
+    warnings.push(`Foreman of ${foremanOf.map(c => c.name).join(', ')}`)
+  }
+  
+  return warnings
+} 
 
   const isForeman = profile?.role === 'foreman'
   const isSupervisor = profile?.role === 'supervisor'
