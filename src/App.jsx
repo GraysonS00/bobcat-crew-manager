@@ -1252,6 +1252,34 @@ const handleDelete = async (employee) => {
           </Card>
         </div>
       )}
+      const EmployeesView = ({ employees, onRefresh, readOnly = false }) => {
+  // ... state, functions, etc ...
+
+  return (
+    <div className="space-y-6">
+      {/* Header section */}
+      
+      {/* Card with employee table */}
+      
+      {/* Add Employee Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/70 ...">
+          ...
+        </div>
+      )}
+
+      {/* Edit Employee Modal */}
+      {editingEmployee && (
+        <div className="fixed inset-0 bg-black/70 ...">
+          ...
+        </div>
+      )}
+
+      {/* 👇 ADD THE DELETE CONFIRMATION MODAL RIGHT HERE 👇 */}
+
+    </div>  // <-- This is the final closing </div> of the return statement
+  )
+}
     </div>
   )
 }
