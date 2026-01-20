@@ -1198,7 +1198,7 @@ const handleDelete = async (employee) => {
                     <td className="py-3 px-4 text-right">
                       <div className="flex justify-end gap-2">
                         <button onClick={() => setEditingEmployee(emp)} className="p-2 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 rounded-lg"><Icons.Edit /></button>
-                        <button onClick={() => handleDelete(emp.id)} className="p-2 text-zinc-400 hover:text-red-400 hover:bg-zinc-700 rounded-lg"><Icons.Trash /></button>
+                        <button onClick={() => setShowDeleteConfirm(emp)} className="p-2 text-zinc-400 hover:text-red-400 hover:bg-zinc-700 rounded-lg"><Icons.Trash /></button>
                       </div>
                     </td>
                   )}
