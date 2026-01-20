@@ -1,5 +1,5 @@
 import React, { useState, useEffect, createContext, useContext } from 'react'
-import { supabase, supabaseAdmin } from './supabaseClient'
+import { supabase } from './supabaseClient'
 
 // =============================================
 // CONTEXT
@@ -482,41 +482,29 @@ const UsersManagementView = ({ profiles, crews, employees, onRefresh }) => {
   const admins = profiles.filter(p => p.role === 'admin')
 
   const handleCreateUser = async () => {
-    if (!supabaseAdmin) {
-      setError('Admin client not configured. Check your service role key.')
-      return
-    }
-    
     setLoading(true)
     setError('')
     setSuccess('')
 
     try {
-      // Create the auth user
-      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-        email: newUser.email,
-        password: newUser.password,
-        email_confirm: true,
-        user_metadata: {
+      const response = await fetch('https://jkghcufbigixfpnnfcet.supabase.co/functions/v1/create-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: newUser.email,
+          password: newUser.password,
           name: newUser.name,
-          role: newUser.role
-        }
+          role: newUser.role,
+          phone: newUser.phone
+        })
       })
 
-      if (authError) throw authError
+      const data = await response.json()
 
-      // Update the profile with additional info
-      if (authData.user) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .update({
-            name: newUser.name,
-            role: newUser.role,
-            phone: newUser.phone || null
-          })
-          .eq('id', authData.user.id)
-
-        if (profileError) throw profileError
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create user')
       }
 
       setSuccess(`User ${newUser.name} created successfully!`)
