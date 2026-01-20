@@ -1288,7 +1288,7 @@ const handleDelete = async (employee) => {
 // CREWS VIEW
 // =============================================
 
-const CrewsView = ({ crews, employees, profiles, profile, onRefresh }) => {
+const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, leakReports }) => {
   const [selectedCrew, setSelectedCrew] = useState(null)
   const [isEditing, setIsEditing] = useState(false)
   const [selectedMembers, setSelectedMembers] = useState([])
@@ -1296,7 +1296,44 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh }) => {
   const [showAddCrew, setShowAddCrew] = useState(false)
   const [newCrewName, setNewCrewName] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
+const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
 
+// Add these functions:
+const handleDeleteCrew = async (crew) => {
+  setLoading(true)
+  try {
+    // First, delete all crew_members for this crew
+    await supabase.from('crew_members').delete().eq('crew_id', crew.id)
+    
+    // Update equipment to remove crew assignment
+    await supabase.from('equipment').update({ crew_id: null }).eq('crew_id', crew.id)
+    
+    // Delete the crew
+    const { error } = await supabase.from('crews').delete().eq('id', crew.id)
+    
+    if (error) throw error
+    
+    setShowDeleteConfirm(null)
+    onRefresh()
+  } catch (err) {
+    alert('Error deleting crew: ' + err.message)
+  }
+  setLoading(false)
+}
+
+const getCrewWarnings = (crew) => {
+  const warnings = []
+  const crewEquipment = equipment?.filter(e => e.crew_id === crew.id) || []
+  const crewReports = leakReports?.filter(r => r.crew_id === crew.id) || []
+  const memberCount = crew.crew_members?.length || 0
+  
+  if (memberCount > 0) warnings.push(`${memberCount} crew member${memberCount > 1 ? 's' : ''} assigned`)
+  if (crewEquipment.length > 0) warnings.push(`${crewEquipment.length} equipment item${crewEquipment.length > 1 ? 's' : ''} will be unassigned`)
+  if (crewReports.length > 0) warnings.push(`${crewReports.length} leak report${crewReports.length > 1 ? 's' : ''} linked (will remain in system)`)
+  
+  return warnings
+}
+  
 // Add this helper function before the handleAdd function:
 const getEmployeeWarnings = (employee) => {
   const warnings = []
@@ -1453,7 +1490,14 @@ const getEmployeeWarnings = (employee) => {
                   <p className="text-sm text-zinc-500">Foreman: {foreman?.name || 'Not assigned'}</p>
                   {!isSupervisor && supervisor && <p className="text-sm text-zinc-500">Supervisor: {supervisor.name}</p>}
                 </div>
-                <Button variant="ghost" size="sm" onClick={() => setSelectedCrew(crew)}><span className="flex items-center gap-1"><Icons.Eye /> View</span></Button>
+              <div className="flex gap-2">
+  <Button variant="ghost" size="sm" onClick={() => setSelectedCrew(crew)}><span className="flex items-center gap-1"><Icons.Eye /> View</span></Button>
+  {isAdmin && (
+    <button onClick={() => setShowDeleteConfirm(crew)} className="p-2 text-zinc-400 hover:text-red-400 hover:bg-zinc-700 rounded-lg">
+      <Icons.Trash />
+    </button>
+  )}
+</div>
               </div>
               <div className="flex flex-wrap gap-2">
                 {members.slice(0, 3).map(m => <div key={m.id} className="px-2 py-1 bg-zinc-800 rounded text-sm text-zinc-300">{m.name}</div>)}
@@ -1508,6 +1552,41 @@ const getEmployeeWarnings = (employee) => {
           </Card>
         </div>
       )}
+     {/* Delete Crew Confirmation Modal */}
+{showDeleteConfirm && (
+  <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+    <Card className="w-full max-w-md">
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-xl font-bold text-zinc-100">Remove Crew</h2>
+        <button onClick={() => setShowDeleteConfirm(null)} className="text-zinc-400 hover:text-zinc-200"><Icons.X /></button>
+      </div>
+      
+      <div className="space-y-4">
+        <p className="text-zinc-300">
+          Are you sure you want to remove <span className="font-semibold text-zinc-100">{showDeleteConfirm.name}</span>?
+        </p>
+        
+        {getCrewWarnings(showDeleteConfirm).length > 0 && (
+          <div className="bg-amber-900/20 border border-amber-700 rounded-lg p-3">
+            <p className="text-amber-400 font-medium text-sm mb-2">Warning:</p>
+            <ul className="text-sm text-zinc-400 space-y-1">
+              {getCrewWarnings(showDeleteConfirm).map((warning, i) => (
+                <li key={i}>• {warning}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        
+        <div className="flex gap-3 pt-4">
+          <Button variant="secondary" onClick={() => setShowDeleteConfirm(null)} className="flex-1">Cancel</Button>
+          <Button variant="danger" onClick={() => handleDeleteCrew(showDeleteConfirm)} loading={loading} className="flex-1">
+            Remove Crew
+          </Button>
+        </div>
+      </div>
+    </Card>
+  </div>
+)} 
     </div>
   )
 }
