@@ -1109,7 +1109,7 @@ const Dashboard = ({ profile, crews, employees, equipment, leakReports }) => {
 // EMPLOYEES VIEW
 // =============================================
 
-const EmployeesView = ({ employees, onRefresh, readOnly = false }) => {
+const EmployeesView = ({ employees, crews, onRefresh, readOnly = false }) => {
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingEmployee, setEditingEmployee] = useState(null)
   const [loading, setLoading] = useState(false)
