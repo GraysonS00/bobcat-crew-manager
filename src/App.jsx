@@ -1135,12 +1135,27 @@ const EmployeesView = ({ employees, crews, onRefresh, readOnly = false }) => {
     setLoading(false)
   }
 
-  const handleDelete = async (id) => {
-    if (confirm('Remove this employee?')) {
-      await supabase.from('employees').delete().eq('id', id)
-      onRefresh()
-    }
+const handleDelete = async (employee) => {
+  setLoading(true)
+  try {
+    // First remove from any crew_members
+    await supabase.from('crew_members').delete().eq('employee_id', employee.id)
+    
+    // Update any crews where this employee is the foreman
+    await supabase.from('crews').update({ foreman_id: null }).eq('foreman_id', employee.id)
+    
+    // Delete the employee
+    const { error } = await supabase.from('employees').delete().eq('id', employee.id)
+    
+    if (error) throw error
+    
+    setShowDeleteConfirm(null)
+    onRefresh()
+  } catch (err) {
+    alert('Error deleting employee: ' + err.message)
   }
+  setLoading(false)
+}
 
   const classifications = ['Foreman', 'Skilled Labor', 'General Labor', 'Operator', 'Welder', 'Truck Driver']
 
