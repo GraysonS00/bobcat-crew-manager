@@ -807,7 +807,6 @@ const UsersManagementView = ({ profiles, crews, employees, onRefresh }) => {
                 value={showCrewAssignment.foreman_user_id || ''}
                 onChange={(e) => {
                   const selectedForeman = foremen.find(f => f.id === e.target.value)
-                  // Try to match with employee
                   const matchingEmployee = employees.find(emp => 
                     emp.classification === 'Foreman' && 
                     emp.name.toLowerCase() === selectedForeman?.name?.toLowerCase()
@@ -1112,8 +1111,25 @@ const Dashboard = ({ profile, crews, employees, equipment, leakReports }) => {
 const EmployeesView = ({ employees, crews, onRefresh, readOnly = false }) => {
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingEmployee, setEditingEmployee] = useState(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
   const [loading, setLoading] = useState(false)
   const [newEmployee, setNewEmployee] = useState({ name: '', classification: 'General Labor', phone: '', employee_number: '', active: true })
+
+  const getEmployeeWarnings = (employee) => {
+    const warnings = []
+    const crewMemberships = crews?.filter(c => 
+      c.crew_members?.some(m => m.employee_id === employee.id)
+    ) || []
+    const foremanOf = crews?.filter(c => c.foreman_id === employee.id) || []
+    
+    if (crewMemberships.length > 0) {
+      warnings.push(`Assigned to ${crewMemberships.length} crew${crewMemberships.length > 1 ? 's' : ''}`)
+    }
+    if (foremanOf.length > 0) {
+      warnings.push(`Foreman of ${foremanOf.map(c => c.name).join(', ')}`)
+    }
+    return warnings
+  }
 
   const handleAdd = async () => {
     setLoading(true)
@@ -1135,27 +1151,20 @@ const EmployeesView = ({ employees, crews, onRefresh, readOnly = false }) => {
     setLoading(false)
   }
 
-const handleDelete = async (employee) => {
-  setLoading(true)
-  try {
-    // First remove from any crew_members
-    await supabase.from('crew_members').delete().eq('employee_id', employee.id)
-    
-    // Update any crews where this employee is the foreman
-    await supabase.from('crews').update({ foreman_id: null }).eq('foreman_id', employee.id)
-    
-    // Delete the employee
-    const { error } = await supabase.from('employees').delete().eq('id', employee.id)
-    
-    if (error) throw error
-    
-    setShowDeleteConfirm(null)
-    onRefresh()
-  } catch (err) {
-    alert('Error deleting employee: ' + err.message)
+  const handleDelete = async (employee) => {
+    setLoading(true)
+    try {
+      await supabase.from('crew_members').delete().eq('employee_id', employee.id)
+      await supabase.from('crews').update({ foreman_id: null }).eq('foreman_id', employee.id)
+      const { error } = await supabase.from('employees').delete().eq('id', employee.id)
+      if (error) throw error
+      setShowDeleteConfirm(null)
+      onRefresh()
+    } catch (err) {
+      alert('Error deleting employee: ' + err.message)
+    }
+    setLoading(false)
   }
-  setLoading(false)
-}
 
   const classifications = ['Foreman', 'Skilled Labor', 'General Labor', 'Operator', 'Welder', 'Truck Driver']
 
@@ -1252,34 +1261,39 @@ const handleDelete = async (employee) => {
           </Card>
         </div>
       )}
-      const EmployeesView = ({ employees, onRefresh, readOnly = false }) => {
-  // ... state, functions, etc ...
 
-  return (
-    <div className="space-y-6">
-      {/* Header section */}
-      
-      {/* Card with employee table */}
-      
-      {/* Add Employee Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black/70 ...">
-          ...
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-zinc-100">Remove Employee</h2>
+              <button onClick={() => setShowDeleteConfirm(null)} className="text-zinc-400 hover:text-zinc-200"><Icons.X /></button>
+            </div>
+            <div className="space-y-4">
+              <p className="text-zinc-300">
+                Are you sure you want to remove <span className="font-semibold text-zinc-100">{showDeleteConfirm.name}</span>?
+              </p>
+              {getEmployeeWarnings(showDeleteConfirm).length > 0 && (
+                <div className="bg-amber-900/20 border border-amber-700 rounded-lg p-3">
+                  <p className="text-amber-400 font-medium text-sm mb-2">Warning:</p>
+                  <ul className="text-sm text-zinc-400 space-y-1">
+                    {getEmployeeWarnings(showDeleteConfirm).map((warning, i) => (
+                      <li key={i}>• {warning}</li>
+                    ))}
+                  </ul>
+                  <p className="text-xs text-zinc-500 mt-2">These assignments will be removed.</p>
+                </div>
+              )}
+              <div className="flex gap-3 pt-4">
+                <Button variant="secondary" onClick={() => setShowDeleteConfirm(null)} className="flex-1">Cancel</Button>
+                <Button variant="danger" onClick={() => handleDelete(showDeleteConfirm)} loading={loading} className="flex-1">
+                  Remove Employee
+                </Button>
+              </div>
+            </div>
+          </Card>
         </div>
       )}
-
-      {/* Edit Employee Modal */}
-      {editingEmployee && (
-        <div className="fixed inset-0 bg-black/70 ...">
-          ...
-        </div>
-      )}
-
-      {/* 👇 ADD THE DELETE CONFIRMATION MODAL RIGHT HERE 👇 */}
-
-    </div>  // <-- This is the final closing </div> of the return statement
-  )
-}
     </div>
   )
 }
@@ -1296,65 +1310,6 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, 
   const [showAddCrew, setShowAddCrew] = useState(false)
   const [newCrewName, setNewCrewName] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
-const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
-
-// Add these functions:
-const handleDeleteCrew = async (crew) => {
-  setLoading(true)
-  try {
-    // First, delete all crew_members for this crew
-    await supabase.from('crew_members').delete().eq('crew_id', crew.id)
-    
-    // Update equipment to remove crew assignment
-    await supabase.from('equipment').update({ crew_id: null }).eq('crew_id', crew.id)
-    
-    // Delete the crew
-    const { error } = await supabase.from('crews').delete().eq('id', crew.id)
-    
-    if (error) throw error
-    
-    setShowDeleteConfirm(null)
-    onRefresh()
-  } catch (err) {
-    alert('Error deleting crew: ' + err.message)
-  }
-  setLoading(false)
-}
-
-const getCrewWarnings = (crew) => {
-  const warnings = []
-  const crewEquipment = equipment?.filter(e => e.crew_id === crew.id) || []
-  const crewReports = leakReports?.filter(r => r.crew_id === crew.id) || []
-  const memberCount = crew.crew_members?.length || 0
-  
-  if (memberCount > 0) warnings.push(`${memberCount} crew member${memberCount > 1 ? 's' : ''} assigned`)
-  if (crewEquipment.length > 0) warnings.push(`${crewEquipment.length} equipment item${crewEquipment.length > 1 ? 's' : ''} will be unassigned`)
-  if (crewReports.length > 0) warnings.push(`${crewReports.length} leak report${crewReports.length > 1 ? 's' : ''} linked (will remain in system)`)
-  
-  return warnings
-}
-  
-// Add this helper function before the handleAdd function:
-const getEmployeeWarnings = (employee) => {
-  const warnings = []
-  
-  // Check if they're assigned to any crews as a member
-  const crewMemberships = crews?.filter(c => 
-    c.crew_members?.some(m => m.employee_id === employee.id)
-  ) || []
-  
-  // Check if they're a foreman of any crew
-  const foremanOf = crews?.filter(c => c.foreman_id === employee.id) || []
-  
-  if (crewMemberships.length > 0) {
-    warnings.push(`Assigned to ${crewMemberships.length} crew${crewMemberships.length > 1 ? 's' : ''}`)
-  }
-  if (foremanOf.length > 0) {
-    warnings.push(`Foreman of ${foremanOf.map(c => c.name).join(', ')}`)
-  }
-  
-  return warnings
-} 
 
   const isForeman = profile?.role === 'foreman'
   const isSupervisor = profile?.role === 'supervisor'
@@ -1364,6 +1319,19 @@ const getEmployeeWarnings = (employee) => {
 
   const displayCrews = isForeman ? (userCrew ? [userCrew] : []) : isSupervisor ? supervisorCrews : crews
   const availableEmployees = employees.filter(e => e.active && e.classification !== 'Foreman')
+
+  const getCrewWarnings = (crew) => {
+    const warnings = []
+    const crewEquipment = equipment?.filter(e => e.crew_id === crew.id) || []
+    const crewReports = leakReports?.filter(r => r.crew_id === crew.id) || []
+    const memberCount = crew.crew_members?.length || 0
+    
+    if (memberCount > 0) warnings.push(`${memberCount} crew member${memberCount > 1 ? 's' : ''} assigned`)
+    if (crewEquipment.length > 0) warnings.push(`${crewEquipment.length} equipment item${crewEquipment.length > 1 ? 's' : ''} will be unassigned`)
+    if (crewReports.length > 0) warnings.push(`${crewReports.length} leak report${crewReports.length > 1 ? 's' : ''} linked (will remain in system)`)
+    
+    return warnings
+  }
 
   const startEditing = (crew) => {
     setSelectedCrew(crew)
@@ -1392,6 +1360,21 @@ const getEmployeeWarnings = (employee) => {
     setNewCrewName('')
     setShowAddCrew(false)
     onRefresh()
+    setLoading(false)
+  }
+
+  const handleDeleteCrew = async (crew) => {
+    setLoading(true)
+    try {
+      await supabase.from('crew_members').delete().eq('crew_id', crew.id)
+      await supabase.from('equipment').update({ crew_id: null }).eq('crew_id', crew.id)
+      const { error } = await supabase.from('crews').delete().eq('id', crew.id)
+      if (error) throw error
+      setShowDeleteConfirm(null)
+      onRefresh()
+    } catch (err) {
+      alert('Error deleting crew: ' + err.message)
+    }
     setLoading(false)
   }
 
@@ -1490,14 +1473,14 @@ const getEmployeeWarnings = (employee) => {
                   <p className="text-sm text-zinc-500">Foreman: {foreman?.name || 'Not assigned'}</p>
                   {!isSupervisor && supervisor && <p className="text-sm text-zinc-500">Supervisor: {supervisor.name}</p>}
                 </div>
-              <div className="flex gap-2">
-  <Button variant="ghost" size="sm" onClick={() => setSelectedCrew(crew)}><span className="flex items-center gap-1"><Icons.Eye /> View</span></Button>
-  {isAdmin && (
-    <button onClick={() => setShowDeleteConfirm(crew)} className="p-2 text-zinc-400 hover:text-red-400 hover:bg-zinc-700 rounded-lg">
-      <Icons.Trash />
-    </button>
-  )}
-</div>
+                <div className="flex gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => setSelectedCrew(crew)}><span className="flex items-center gap-1"><Icons.Eye /> View</span></Button>
+                  {isAdmin && (
+                    <button onClick={() => setShowDeleteConfirm(crew)} className="p-2 text-zinc-400 hover:text-red-400 hover:bg-zinc-700 rounded-lg">
+                      <Icons.Trash />
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="flex flex-wrap gap-2">
                 {members.slice(0, 3).map(m => <div key={m.id} className="px-2 py-1 bg-zinc-800 rounded text-sm text-zinc-300">{m.name}</div>)}
@@ -1552,41 +1535,38 @@ const getEmployeeWarnings = (employee) => {
           </Card>
         </div>
       )}
-     {/* Delete Crew Confirmation Modal */}
-{showDeleteConfirm && (
-  <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-    <Card className="w-full max-w-md">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-bold text-zinc-100">Remove Crew</h2>
-        <button onClick={() => setShowDeleteConfirm(null)} className="text-zinc-400 hover:text-zinc-200"><Icons.X /></button>
-      </div>
-      
-      <div className="space-y-4">
-        <p className="text-zinc-300">
-          Are you sure you want to remove <span className="font-semibold text-zinc-100">{showDeleteConfirm.name}</span>?
-        </p>
-        
-        {getCrewWarnings(showDeleteConfirm).length > 0 && (
-          <div className="bg-amber-900/20 border border-amber-700 rounded-lg p-3">
-            <p className="text-amber-400 font-medium text-sm mb-2">Warning:</p>
-            <ul className="text-sm text-zinc-400 space-y-1">
-              {getCrewWarnings(showDeleteConfirm).map((warning, i) => (
-                <li key={i}>• {warning}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-        
-        <div className="flex gap-3 pt-4">
-          <Button variant="secondary" onClick={() => setShowDeleteConfirm(null)} className="flex-1">Cancel</Button>
-          <Button variant="danger" onClick={() => handleDeleteCrew(showDeleteConfirm)} loading={loading} className="flex-1">
-            Remove Crew
-          </Button>
+
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-zinc-100">Remove Crew</h2>
+              <button onClick={() => setShowDeleteConfirm(null)} className="text-zinc-400 hover:text-zinc-200"><Icons.X /></button>
+            </div>
+            <div className="space-y-4">
+              <p className="text-zinc-300">
+                Are you sure you want to remove <span className="font-semibold text-zinc-100">{showDeleteConfirm.name}</span>?
+              </p>
+              {getCrewWarnings(showDeleteConfirm).length > 0 && (
+                <div className="bg-amber-900/20 border border-amber-700 rounded-lg p-3">
+                  <p className="text-amber-400 font-medium text-sm mb-2">Warning:</p>
+                  <ul className="text-sm text-zinc-400 space-y-1">
+                    {getCrewWarnings(showDeleteConfirm).map((warning, i) => (
+                      <li key={i}>• {warning}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <div className="flex gap-3 pt-4">
+                <Button variant="secondary" onClick={() => setShowDeleteConfirm(null)} className="flex-1">Cancel</Button>
+                <Button variant="danger" onClick={() => handleDeleteCrew(showDeleteConfirm)} loading={loading} className="flex-1">
+                  Remove Crew
+                </Button>
+              </div>
+            </div>
+          </Card>
         </div>
-      </div>
-    </Card>
-  </div>
-)} 
+      )}
     </div>
   )
 }
@@ -2211,7 +2191,7 @@ const SupervisorReviewView = ({ leakReports, crews, profile, onRefresh }) => {
             {reviewingReport.status === 'reviewed' && (
               <div className="mt-4 p-4 bg-emerald-900/20 border border-emerald-800 rounded-lg">
                 <p className="text-emerald-400 font-medium">✓ Reviewed</p>
-                <p className="text-sm text-zinc-400 mt-1">{new Date(reviewingReport.reviewed_at).toLocaleDateString()}</p>
+                <p className="text-sm text-zinc-400">{new Date(reviewingReport.reviewed_at).toLocaleDateString()}</p>
               </div>
             )}
           </Card>
@@ -2304,7 +2284,12 @@ const AdminLeakReportsView = ({ leakReports, crews, profiles }) => {
               <div><p className="text-sm text-zinc-500">Address</p><p className="text-zinc-200">{viewingReport.address || '-'}</p></div>
               {viewingReport.rate_type_notes && <div><p className="text-sm text-zinc-500">Classification Notes</p><p className="text-zinc-300 bg-zinc-800/50 rounded-lg p-3">{viewingReport.rate_type_notes}</p></div>}
               {viewingReport.notes && <div><p className="text-sm text-zinc-500">Report Notes</p><p className="text-zinc-300 bg-zinc-800/50 rounded-lg p-3">{viewingReport.notes}</p></div>}
-              {viewingReport.reviewed_by && <div className="text-sm text-zinc-500 pt-4 border-t border-zinc-800">Reviewed by {profiles?.find(p => p.id === viewingReport.reviewed_by)?.name || 'Unknown'}</div>}
+              {viewingReport.reviewed_by && (
+                <div className="mt-4 p-4 bg-emerald-900/20 border border-emerald-800 rounded-lg">
+                  <p className="text-emerald-400 font-medium">✓ Reviewed by {profiles.find(p => p.id === viewingReport.reviewed_by)?.name || 'Unknown'}</p>
+                  <p className="text-sm text-zinc-400">{new Date(viewingReport.reviewed_at).toLocaleDateString()}</p>
+                </div>
+              )}
             </div>
           </Card>
         </div>
@@ -2345,29 +2330,35 @@ export default function App() {
 
   const fetchProfile = async (userId) => {
     const { data } = await supabase.from('profiles').select('*').eq('id', userId).single()
-    if (data) { setProfile(data); fetchAllData() }
+    setProfile(data)
+    if (data) fetchAllData()
     setLoading(false)
   }
 
   const fetchAllData = async () => {
-    const [employeesRes, crewsRes, equipmentRes, leakReportsRes, profilesRes] = await Promise.all([
+    const [empRes, crewRes, equipRes, reportRes, profRes] = await Promise.all([
       supabase.from('employees').select('*').order('name'),
-      supabase.from('crews').select('*, foreman:employees!crews_foreman_id_fkey(id, name, phone), crew_members(employee_id)'),
+      supabase.from('crews').select('*, crew_members(*)').order('name'),
       supabase.from('equipment').select('*').order('created_at', { ascending: false }),
-      supabase.from('leak_reports').select('*').order('date', { ascending: false }),
-      supabase.from('profiles').select('*')
+      supabase.from('leak_reports').select('*').order('created_at', { ascending: false }),
+      supabase.from('profiles').select('*').order('name'),
     ])
-    if (employeesRes.data) setEmployees(employeesRes.data)
-    if (crewsRes.data) setCrews(crewsRes.data)
-    if (equipmentRes.data) setEquipment(equipmentRes.data)
-    if (leakReportsRes.data) setLeakReports(leakReportsRes.data)
-    if (profilesRes.data) setProfiles(profilesRes.data)
+    setEmployees(empRes.data || [])
+    setCrews(crewRes.data || [])
+    setEquipment(equipRes.data || [])
+    setLeakReports(reportRes.data || [])
+    setProfiles(profRes.data || [])
   }
 
-  const handleLogout = async () => { await supabase.auth.signOut(); setCurrentView('dashboard') }
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    setProfile(null)
+    setCurrentView('dashboard')
+  }
 
   if (loading) return <LoadingScreen />
   if (!session) return <LoginScreen />
+  if (!profile) return <LoadingScreen />
 
   const renderView = () => {
     switch (currentView) {
@@ -2376,9 +2367,9 @@ export default function App() {
       case 'employees': return <EmployeesView employees={employees} crews={crews} onRefresh={fetchAllData} readOnly={profile?.role !== 'admin'} />
       case 'crews': case 'my-crew': return <CrewsView crews={crews} employees={employees} profiles={profiles} profile={profile} onRefresh={fetchAllData} equipment={equipment} leakReports={leakReports} />
       case 'equipment': case 'my-equipment': return <EquipmentView equipment={equipment} crews={crews} profile={profile} onRefresh={fetchAllData} />
+      case 'leak-reports': return <AdminLeakReportsView leakReports={leakReports} crews={crews} profiles={profiles} />
       case 'my-leak-reports': return <ForemanLeakReportsView leakReports={leakReports} crews={crews} profile={profile} onRefresh={fetchAllData} />
       case 'review-reports': return <SupervisorReviewView leakReports={leakReports} crews={crews} profile={profile} onRefresh={fetchAllData} />
-      case 'leak-reports': return <AdminLeakReportsView leakReports={leakReports} crews={crews} profiles={profiles} onRefresh={fetchAllData} />
       default: return <Dashboard profile={profile} crews={crews} employees={employees} equipment={equipment} leakReports={leakReports} />
     }
   }
@@ -2386,11 +2377,8 @@ export default function App() {
   return (
     <AuthContext.Provider value={{ session, profile }}>
       <div className="min-h-screen bg-zinc-950">
-        <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-zinc-900 via-zinc-950 to-zinc-950 pointer-events-none" />
-        <div className="relative z-10">
-          <Navigation currentView={currentView} setCurrentView={setCurrentView} profile={profile} onLogout={handleLogout} />
-          <main className="max-w-7xl mx-auto px-4 py-6">{renderView()}</main>
-        </div>
+        <Navigation currentView={currentView} setCurrentView={setCurrentView} profile={profile} onLogout={handleLogout} />
+        <main className="max-w-7xl mx-auto px-4 py-6">{renderView()}</main>
       </div>
     </AuthContext.Provider>
   )
