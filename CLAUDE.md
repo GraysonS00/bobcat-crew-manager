@@ -71,3 +71,46 @@ Storage: `equipment-photos` bucket (public read, authenticated upload).
 Required for deployment (set in Vercel):
 - `VITE_SUPABASE_URL` - Supabase project URL
 - `VITE_SUPABASE_ANON_KEY` - Supabase anon/public key
+
+## Recent Development Notes
+
+### Login Screen Enhancements
+- Form wrapped in `<form>` element with `onSubmit` handler for Enter key support
+- Show/hide password toggle button using eye icon
+
+### Admin Leak Reports View
+- Admins can view full leak report details and edit any submitted report
+- Reports organized by **Supervisor tabs** then **Week sub-tabs** (Monday as week start)
+- Week grouping uses `getWeekMonday()` helper that adjusts dates so Monday is the first day of the week
+- "All" option available for both supervisor and week filters
+
+### Supervisor Review Enhancements
+- Supervisors can edit reports that have already been reviewed (not just pending ones)
+- Edit button visible regardless of report status
+
+### PDF Export Functionality
+Uses **pdf-lib** library to fill a pre-made PDF template with report data.
+
+**Key files:**
+- `createPdfTemplate.js` - One-time script to generate fillable PDF template from the original "Leak Report Form.pdf"
+- `public/LeakReportTemplate.pdf` - The fillable template served by the web app
+- `LeakReportTemplate.pdf` - Copy in root (generated output)
+
+**How it works:**
+1. `loadPdfTemplate()` fetches and caches the template PDF
+2. `generateLeakReportPDF()` loads the template, fills all form fields (text and checkboxes), flattens the form, and returns PDF bytes
+3. `exportReportsAsZip()` generates PDFs for filtered reports and bundles them into a downloadable ZIP file
+
+**Export options:**
+- "Export Current View" button exports reports matching current supervisor/week filters
+- Export modal allows filtering by date range, supervisors, and classification type
+
+**PDF field naming convention** (in createPdfTemplate.js):
+- Text fields: `date`, `foreman`, `supervisor`, `project_number`, `leak_number`, `address`, `*_qty`, `downtime_*_start/end`, `bore_*`, `crew_*_time`, `fcc_name`, `notes`
+- Checkboxes: `job_type_*`, `leak_*`, `pipe_type_*`, `*_yes`, `*_no`, `welder_*`, `bore_*`, etc.
+
+To adjust field positions, edit coordinates in `createPdfTemplate.js` and regenerate:
+```bash
+node createPdfTemplate.js
+cp LeakReportTemplate.pdf public/
+```
