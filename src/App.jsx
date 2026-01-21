@@ -2766,7 +2766,7 @@ const AdminLeakReportsView = ({ leakReports, crews, profiles, onRefresh, employe
           <Button variant="secondary" onClick={() => setShowExportModal(true)}>
             <span className="flex items-center gap-2"><Icons.Download /> Export with Filters</span>
           </Button>
-          {(activeSupervisor !== 'all' || activeWeek !== 'all') && displayReports.length > 0 && (
+          {displayReports.length > 0 && (
             <Button variant="primary" onClick={handleExportCurrentView} loading={exportLoading}>
               <span className="flex items-center gap-2"><Icons.Download /> Export Current View ({displayReports.length})</span>
             </Button>
