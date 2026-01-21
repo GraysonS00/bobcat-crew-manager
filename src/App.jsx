@@ -2184,7 +2184,7 @@ const SupervisorReviewView = ({ leakReports, crews, profile, onRefresh }) => {
                 <p className="text-sm text-zinc-500">{crews.find(c => c.id === reviewingReport.crew_id)?.name} • {reviewingReport.date}</p>
               </div>
               <div className="flex items-center gap-2">
-                {reviewingReport.status === 'submitted' && <Button variant="secondary" size="sm" onClick={() => setEditMode(!editMode)}>{editMode ? 'View Only' : 'Edit'}</Button>}
+                <Button variant="secondary" size="sm" onClick={() => setEditMode(!editMode)}>{editMode ? 'View Only' : 'Edit'}</Button>
                 <button onClick={() => { setReviewingReport(null); setFormData(null) }} className="text-zinc-400 hover:text-zinc-200"><Icons.X /></button>
               </div>
             </div>
@@ -2196,26 +2196,26 @@ const SupervisorReviewView = ({ leakReports, crews, profile, onRefresh }) => {
               <p className="text-sm text-zinc-400">Select billing type:</p>
               <div className="flex flex-wrap gap-2">
                 {[{ value: 'all_hourly', label: 'Hourly' }, { value: 'unit_rates', label: 'Unit' }, { value: 'both', label: 'Both' }].map(opt => (
-                  <button key={opt.value} onClick={() => setClassification(opt.value)}
-                    className={`px-6 py-3 rounded-lg font-medium ${classification === opt.value 
+                  <button key={opt.value} onClick={() => editMode && setClassification(opt.value)} disabled={!editMode}
+                    className={`px-6 py-3 rounded-lg font-medium ${classification === opt.value
                       ? opt.value === 'all_hourly' ? 'bg-sky-500 text-white' : opt.value === 'unit_rates' ? 'bg-purple-500 text-white' : 'bg-amber-500 text-zinc-900'
-                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>{opt.label}</button>
+                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'} ${!editMode ? 'opacity-50 cursor-not-allowed' : ''}`}>{opt.label}</button>
                 ))}
               </div>
-              {classification === 'both' && <Textarea label="Explain why both (required)" value={classificationNotes} onChange={(e) => setClassificationNotes(e.target.value)} rows={3} />}
+              {classification === 'both' && <Textarea label="Explain why both (required)" value={classificationNotes} onChange={(e) => setClassificationNotes(e.target.value)} rows={3} disabled={!editMode} />}
             </div>
 
-            {reviewingReport.status === 'submitted' && (
-              <div className="flex gap-3 pt-4 border-t border-zinc-800 sticky bottom-0 bg-zinc-900 py-4 -mb-5">
-                <Button variant="secondary" onClick={() => { setReviewingReport(null); setFormData(null) }} className="flex-1">Cancel</Button>
-                <Button variant="success" onClick={handleSubmitReview} loading={loading} className="flex-1"><span className="flex items-center gap-2"><Icons.Check /> Submit Review</span></Button>
-              </div>
-            )}
-
-            {reviewingReport.status === 'reviewed' && (
+            {reviewingReport.status === 'reviewed' && !editMode && (
               <div className="mt-4 p-4 bg-emerald-900/20 border border-emerald-800 rounded-lg">
                 <p className="text-emerald-400 font-medium">✓ Reviewed</p>
                 <p className="text-sm text-zinc-400">{new Date(reviewingReport.reviewed_at).toLocaleDateString()}</p>
+              </div>
+            )}
+
+            {(reviewingReport.status === 'submitted' || editMode) && (
+              <div className="flex gap-3 pt-4 border-t border-zinc-800 sticky bottom-0 bg-zinc-900 py-4 -mb-5">
+                <Button variant="secondary" onClick={() => { setReviewingReport(null); setFormData(null) }} className="flex-1">Cancel</Button>
+                <Button variant="success" onClick={handleSubmitReview} loading={loading} className="flex-1"><span className="flex items-center gap-2"><Icons.Check /> {reviewingReport.status === 'reviewed' ? 'Save Changes' : 'Submit Review'}</span></Button>
               </div>
             )}
           </Card>
