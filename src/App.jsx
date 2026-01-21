@@ -2230,7 +2230,8 @@ const SupervisorReviewView = ({ leakReports, crews, profile, onRefresh }) => {
 // =============================================
 
 const AdminLeakReportsView = ({ leakReports, crews, profiles, onRefresh }) => {
-  const [activeTab, setActiveTab] = useState('all')
+  const [activeSupervisor, setActiveSupervisor] = useState('all')
+  const [activeWeek, setActiveWeek] = useState('all')
   const [viewingReport, setViewingReport] = useState(null)
   const [editMode, setEditMode] = useState(false)
   const [formData, setFormData] = useState(null)
@@ -2238,11 +2239,50 @@ const AdminLeakReportsView = ({ leakReports, crews, profiles, onRefresh }) => {
   const [classificationNotes, setClassificationNotes] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const pendingReports = leakReports.filter(r => r.status === 'submitted')
-  const hourlyReports = leakReports.filter(r => r.rate_type === 'all_hourly')
-  const unitReports = leakReports.filter(r => r.rate_type === 'unit_rates')
-  const bothReports = leakReports.filter(r => r.rate_type === 'both')
-  const displayReports = activeTab === 'all' ? leakReports : activeTab === 'pending' ? pendingReports : activeTab === 'hourly' ? hourlyReports : activeTab === 'unit' ? unitReports : bothReports
+  // Get Monday of a given date's week
+  const getWeekMonday = (dateStr) => {
+    const date = new Date(dateStr + 'T00:00:00')
+    const day = date.getDay()
+    const diff = day === 0 ? -6 : 1 - day // Adjust so Monday is start of week
+    const monday = new Date(date)
+    monday.setDate(date.getDate() + diff)
+    return monday.toISOString().split('T')[0]
+  }
+
+  // Format date for display
+  const formatWeekLabel = (mondayStr) => {
+    const date = new Date(mondayStr + 'T00:00:00')
+    return `Week of ${date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' })}`
+  }
+
+  // Get supervisor for a report (via crew)
+  const getReportSupervisor = (report) => {
+    const crew = crews.find(c => c.id === report.crew_id)
+    return crew?.supervisor_id || null
+  }
+
+  // Get unique supervisors who have reports
+  const supervisorsWithReports = [...new Set(leakReports.map(r => getReportSupervisor(r)).filter(Boolean))]
+  const supervisorProfiles = supervisorsWithReports.map(id => profiles.find(p => p.id === id)).filter(Boolean)
+
+  // Filter reports by supervisor
+  const reportsBySupervisor = activeSupervisor === 'all'
+    ? leakReports
+    : leakReports.filter(r => getReportSupervisor(r) === activeSupervisor)
+
+  // Get unique weeks for current supervisor's reports, sorted descending
+  const weeksInReports = [...new Set(reportsBySupervisor.map(r => r.date ? getWeekMonday(r.date) : null).filter(Boolean))].sort((a, b) => b.localeCompare(a))
+
+  // Filter reports by week
+  const displayReports = activeWeek === 'all'
+    ? reportsBySupervisor
+    : reportsBySupervisor.filter(r => r.date && getWeekMonday(r.date) === activeWeek)
+
+  // Reset week tab when supervisor changes
+  const handleSupervisorChange = (supId) => {
+    setActiveSupervisor(supId)
+    setActiveWeek('all')
+  }
 
   const openReport = (report) => {
     const parsed = { ...report, downtime_periods: typeof report.downtime_periods === 'string' ? JSON.parse(report.downtime_periods || '[]') : (report.downtime_periods || []) }
@@ -2288,12 +2328,28 @@ const AdminLeakReportsView = ({ leakReports, crews, profiles, onRefresh }) => {
     <div className="space-y-6">
       <div><h1 className="text-2xl font-bold text-zinc-100">All Leak Reports</h1><p className="text-zinc-500">{leakReports.length} total</p></div>
 
-      <div className="flex flex-wrap gap-2">
-        <TabButton active={activeTab === 'all'} onClick={() => setActiveTab('all')} count={leakReports.length}>All</TabButton>
-        <TabButton active={activeTab === 'pending'} onClick={() => setActiveTab('pending')} count={pendingReports.length}>Pending</TabButton>
-        <TabButton active={activeTab === 'hourly'} onClick={() => setActiveTab('hourly')} count={hourlyReports.length}>Hourly</TabButton>
-        <TabButton active={activeTab === 'unit'} onClick={() => setActiveTab('unit')} count={unitReports.length}>Unit</TabButton>
-        <TabButton active={activeTab === 'both'} onClick={() => setActiveTab('both')} count={bothReports.length}>Both</TabButton>
+      {/* Supervisor Tabs */}
+      <div>
+        <p className="text-sm text-zinc-500 mb-2">By Supervisor</p>
+        <div className="flex flex-wrap gap-2">
+          <TabButton active={activeSupervisor === 'all'} onClick={() => handleSupervisorChange('all')} count={leakReports.length}>All</TabButton>
+          {supervisorProfiles.map(sup => {
+            const count = leakReports.filter(r => getReportSupervisor(r) === sup.id).length
+            return <TabButton key={sup.id} active={activeSupervisor === sup.id} onClick={() => handleSupervisorChange(sup.id)} count={count}>{sup.name}</TabButton>
+          })}
+        </div>
+      </div>
+
+      {/* Week Tabs */}
+      <div>
+        <p className="text-sm text-zinc-500 mb-2">By Week</p>
+        <div className="flex flex-wrap gap-2">
+          <TabButton active={activeWeek === 'all'} onClick={() => setActiveWeek('all')} count={reportsBySupervisor.length}>All Weeks</TabButton>
+          {weeksInReports.map(week => {
+            const count = reportsBySupervisor.filter(r => r.date && getWeekMonday(r.date) === week).length
+            return <TabButton key={week} active={activeWeek === week} onClick={() => setActiveWeek(week)} count={count}>{formatWeekLabel(week)}</TabButton>
+          })}
+        </div>
       </div>
 
       <Card>
