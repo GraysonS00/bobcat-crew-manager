@@ -2229,15 +2229,60 @@ const SupervisorReviewView = ({ leakReports, crews, profile, onRefresh }) => {
 // ADMIN LEAK REPORTS VIEW
 // =============================================
 
-const AdminLeakReportsView = ({ leakReports, crews, profiles }) => {
+const AdminLeakReportsView = ({ leakReports, crews, profiles, onRefresh }) => {
   const [activeTab, setActiveTab] = useState('all')
   const [viewingReport, setViewingReport] = useState(null)
+  const [editMode, setEditMode] = useState(false)
+  const [formData, setFormData] = useState(null)
+  const [classification, setClassification] = useState('')
+  const [classificationNotes, setClassificationNotes] = useState('')
+  const [loading, setLoading] = useState(false)
 
   const pendingReports = leakReports.filter(r => r.status === 'submitted')
   const hourlyReports = leakReports.filter(r => r.rate_type === 'all_hourly')
   const unitReports = leakReports.filter(r => r.rate_type === 'unit_rates')
   const bothReports = leakReports.filter(r => r.rate_type === 'both')
   const displayReports = activeTab === 'all' ? leakReports : activeTab === 'pending' ? pendingReports : activeTab === 'hourly' ? hourlyReports : activeTab === 'unit' ? unitReports : bothReports
+
+  const openReport = (report) => {
+    const parsed = { ...report, downtime_periods: typeof report.downtime_periods === 'string' ? JSON.parse(report.downtime_periods || '[]') : (report.downtime_periods || []) }
+    setViewingReport(report)
+    setFormData(parsed)
+    setClassification(report.rate_type || '')
+    setClassificationNotes(report.rate_type_notes || '')
+    setEditMode(false)
+  }
+
+  const closeReport = () => {
+    setViewingReport(null)
+    setFormData(null)
+    setEditMode(false)
+  }
+
+  const updateForm = (field, value) => setFormData(prev => ({ ...prev, [field]: value }))
+  const addDowntimePeriod = () => setFormData(prev => ({ ...prev, downtime_periods: [...(prev.downtime_periods || []), { start: '', end: '' }] }))
+  const updateDowntimePeriod = (index, field, value) => setFormData(prev => ({ ...prev, downtime_periods: (prev.downtime_periods || []).map((p, i) => i === index ? { ...p, [field]: value } : p) }))
+  const removeDowntimePeriod = (index) => setFormData(prev => ({ ...prev, downtime_periods: (prev.downtime_periods || []).filter((_, i) => i !== index) }))
+
+  const handleSave = async () => {
+    setLoading(true)
+    const updateData = {
+      ...formData, downtime_periods: JSON.stringify(formData.downtime_periods || []),
+      bore_size_inches: formData.bore_size_inches ? parseFloat(formData.bore_size_inches) : null,
+      bore_footage: formData.bore_footage ? parseFloat(formData.bore_footage) : null,
+      leak_type: formData.leak_type || null, pipe_type: formData.pipe_type || null,
+      welder_type: formData.welder_type || null, bore_type: formData.bore_type || null, soil_type: formData.soil_type || null,
+      crew_start_time: formData.crew_start_time || null, crew_end_time: formData.crew_end_time || null,
+      time_called_off_to_grade_1: formData.time_called_off_to_grade_1 || null, time_leak_turned_grade_1: formData.time_leak_turned_grade_1 || null,
+      rate_type: classification || null, rate_type_notes: classification === 'both' ? classificationNotes : null,
+    }
+    delete updateData.id
+    delete updateData.created_at
+    const { error } = await supabase.from('leak_reports').update(updateData).eq('id', viewingReport.id)
+    if (!error) { closeReport(); onRefresh() }
+    else alert('Error: ' + error.message)
+    setLoading(false)
+  }
 
   return (
     <div className="space-y-6">
@@ -2276,7 +2321,7 @@ const AdminLeakReportsView = ({ leakReports, crews, profiles }) => {
                     <td className="py-3 px-4 text-zinc-400 max-w-[200px] truncate">{report.address || '-'}</td>
                     <td className="py-3 px-4"><Badge variant={report.status === 'reviewed' ? 'success' : 'warning'}>{report.status === 'reviewed' ? 'Reviewed' : 'Pending'}</Badge></td>
                     <td className="py-3 px-4">{report.rate_type ? <Badge variant={report.rate_type === 'all_hourly' ? 'info' : report.rate_type === 'unit_rates' ? 'purple' : 'default'}>{report.rate_type === 'all_hourly' ? 'Hourly' : report.rate_type === 'unit_rates' ? 'Unit' : 'Both'}</Badge> : '-'}</td>
-                    <td className="py-3 px-4 text-right"><Button variant="ghost" size="sm" onClick={() => setViewingReport(report)}><Icons.Eye /></Button></td>
+                    <td className="py-3 px-4 text-right"><Button variant="ghost" size="sm" onClick={() => openReport(report)}><Icons.Eye /></Button></td>
                   </tr>
                 )
               })}
@@ -2286,35 +2331,53 @@ const AdminLeakReportsView = ({ leakReports, crews, profiles }) => {
         </div>
       </Card>
 
-      {viewingReport && (
+      {viewingReport && formData && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-6 sticky top-0 bg-zinc-900 py-2 -mt-2 z-10">
               <div>
                 <h2 className="text-xl font-bold text-zinc-100">Report Details</h2>
                 <p className="text-sm text-zinc-500">{crews.find(c => c.id === viewingReport.crew_id)?.name} • {viewingReport.date}</p>
               </div>
-              <button onClick={() => setViewingReport(null)} className="text-zinc-400 hover:text-zinc-200"><Icons.X /></button>
+              <div className="flex items-center gap-2">
+                <Button variant="secondary" size="sm" onClick={() => setEditMode(!editMode)}>{editMode ? 'View Only' : 'Edit'}</Button>
+                <button onClick={closeReport} className="text-zinc-400 hover:text-zinc-200"><Icons.X /></button>
+              </div>
             </div>
+
             <div className="flex flex-wrap gap-2 mb-4">
               <Badge variant={viewingReport.status === 'reviewed' ? 'success' : 'warning'}>{viewingReport.status === 'reviewed' ? 'Reviewed' : 'Pending'}</Badge>
               {viewingReport.rate_type && <Badge variant={viewingReport.rate_type === 'all_hourly' ? 'info' : viewingReport.rate_type === 'unit_rates' ? 'purple' : 'default'}>{viewingReport.rate_type === 'all_hourly' ? 'Hourly' : viewingReport.rate_type === 'unit_rates' ? 'Unit' : 'Both'}</Badge>}
             </div>
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div><p className="text-sm text-zinc-500">Leak #</p><p className="text-zinc-200">{viewingReport.leak_number || '-'}</p></div>
-                <div><p className="text-sm text-zinc-500">Project #</p><p className="text-zinc-200">{viewingReport.project_number || '-'}</p></div>
+
+            <LeakReportForm formData={formData} updateForm={updateForm} addDowntimePeriod={addDowntimePeriod} updateDowntimePeriod={updateDowntimePeriod} removeDowntimePeriod={removeDowntimePeriod} disabled={!editMode} />
+
+            <div className="space-y-4 mt-6 pt-6 border-t-2 border-amber-500/50">
+              <h3 className="text-lg font-semibold text-amber-400">Classification</h3>
+              <div className="flex flex-wrap gap-2">
+                {[{ value: 'all_hourly', label: 'Hourly' }, { value: 'unit_rates', label: 'Unit' }, { value: 'both', label: 'Both' }].map(opt => (
+                  <button key={opt.value} onClick={() => editMode && setClassification(opt.value)} disabled={!editMode}
+                    className={`px-6 py-3 rounded-lg font-medium ${classification === opt.value
+                      ? opt.value === 'all_hourly' ? 'bg-sky-500 text-white' : opt.value === 'unit_rates' ? 'bg-purple-500 text-white' : 'bg-amber-500 text-zinc-900'
+                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'} ${!editMode ? 'opacity-50 cursor-not-allowed' : ''}`}>{opt.label}</button>
+                ))}
               </div>
-              <div><p className="text-sm text-zinc-500">Address</p><p className="text-zinc-200">{viewingReport.address || '-'}</p></div>
-              {viewingReport.rate_type_notes && <div><p className="text-sm text-zinc-500">Classification Notes</p><p className="text-zinc-300 bg-zinc-800/50 rounded-lg p-3">{viewingReport.rate_type_notes}</p></div>}
-              {viewingReport.notes && <div><p className="text-sm text-zinc-500">Report Notes</p><p className="text-zinc-300 bg-zinc-800/50 rounded-lg p-3">{viewingReport.notes}</p></div>}
-              {viewingReport.reviewed_by && (
-                <div className="mt-4 p-4 bg-emerald-900/20 border border-emerald-800 rounded-lg">
-                  <p className="text-emerald-400 font-medium">✓ Reviewed by {profiles.find(p => p.id === viewingReport.reviewed_by)?.name || 'Unknown'}</p>
-                  <p className="text-sm text-zinc-400">{new Date(viewingReport.reviewed_at).toLocaleDateString()}</p>
-                </div>
-              )}
+              {classification === 'both' && <Textarea label="Explain why both" value={classificationNotes} onChange={(e) => setClassificationNotes(e.target.value)} rows={3} disabled={!editMode} />}
             </div>
+
+            {viewingReport.reviewed_by && (
+              <div className="mt-4 p-4 bg-emerald-900/20 border border-emerald-800 rounded-lg">
+                <p className="text-emerald-400 font-medium">✓ Reviewed by {profiles.find(p => p.id === viewingReport.reviewed_by)?.name || 'Unknown'}</p>
+                <p className="text-sm text-zinc-400">{new Date(viewingReport.reviewed_at).toLocaleDateString()}</p>
+              </div>
+            )}
+
+            {editMode && (
+              <div className="flex gap-3 pt-4 border-t border-zinc-800 sticky bottom-0 bg-zinc-900 py-4 -mb-5 mt-4">
+                <Button variant="secondary" onClick={closeReport} className="flex-1">Cancel</Button>
+                <Button variant="primary" onClick={handleSave} loading={loading} className="flex-1"><span className="flex items-center gap-2"><Icons.Check /> Save Changes</span></Button>
+              </div>
+            )}
           </Card>
         </div>
       )}
@@ -2391,7 +2454,7 @@ export default function App() {
       case 'employees': return <EmployeesView employees={employees} crews={crews} onRefresh={fetchAllData} readOnly={profile?.role !== 'admin'} />
       case 'crews': case 'my-crew': return <CrewsView crews={crews} employees={employees} profiles={profiles} profile={profile} onRefresh={fetchAllData} equipment={equipment} leakReports={leakReports} />
       case 'equipment': case 'my-equipment': return <EquipmentView equipment={equipment} crews={crews} profile={profile} onRefresh={fetchAllData} />
-      case 'leak-reports': return <AdminLeakReportsView leakReports={leakReports} crews={crews} profiles={profiles} />
+      case 'leak-reports': return <AdminLeakReportsView leakReports={leakReports} crews={crews} profiles={profiles} onRefresh={fetchAllData} />
       case 'my-leak-reports': return <ForemanLeakReportsView leakReports={leakReports} crews={crews} profile={profile} onRefresh={fetchAllData} />
       case 'review-reports': return <SupervisorReviewView leakReports={leakReports} crews={crews} profile={profile} onRefresh={fetchAllData} />
       default: return <Dashboard profile={profile} crews={crews} employees={employees} equipment={equipment} leakReports={leakReports} />
