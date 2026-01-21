@@ -2239,313 +2239,246 @@ const SupervisorReviewView = ({ leakReports, crews, profile, onRefresh }) => {
 const generateLeakReportPDF = (report, crew, supervisorProfile, foremanEmployee) => {
   const doc = new jsPDF()
   const pageWidth = doc.internal.pageSize.getWidth()
+  const margin = 12
+  const cardPadding = 4
+  const colWidth = (pageWidth - margin * 2 - 6) / 2
 
-  // Colors matching the Bobcat branding
+  // Colors
   const orange = [230, 126, 34]
-  const black = [0, 0, 0]
-  const gray = [100, 100, 100]
-  const lightGray = [200, 200, 200]
+  const darkGray = [60, 60, 60]
+  const medGray = [120, 120, 120]
+  const lightGray = [220, 220, 220]
+  const white = [255, 255, 255]
+  const green = [34, 197, 94]
+  const red = [239, 68, 68]
 
-  let y = 15
+  // Helper to draw a card/box
+  const drawCard = (x, y, w, h, title) => {
+    doc.setDrawColor(...lightGray)
+    doc.setLineWidth(0.5)
+    doc.roundedRect(x, y, w, h, 2, 2)
+    if (title) {
+      doc.setFontSize(7)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(...medGray)
+      doc.text(title, x + cardPadding, y + 4)
+    }
+  }
 
-  // Header - Bobcat Contracting L.L.C.
-  doc.setFontSize(24)
-  doc.setTextColor(...orange)
+  // Helper for checkmark or X
+  const checkMark = (val) => val === true ? '✓' : val === false ? '✗' : '-'
+  const checkColor = (val) => val === true ? green : val === false ? red : medGray
+
+  let y = margin
+
+  // ========== HEADER ==========
+  doc.setFillColor(...orange)
+  doc.rect(0, 0, pageWidth, 20, 'F')
+
+  doc.setFontSize(14)
   doc.setFont('helvetica', 'bold')
-  doc.text('BOBCAT', pageWidth / 2 - 25, y)
-  doc.setFontSize(10)
-  doc.text('CONTRACTING L.L.C.', pageWidth / 2 - 18, y + 6)
+  doc.setTextColor(...white)
+  doc.text('BOBCAT CONTRACTING', margin, 9)
 
-  // Header info boxes
-  doc.setTextColor(...black)
-  doc.setFontSize(10)
+  doc.setFontSize(9)
   doc.setFont('helvetica', 'normal')
+  doc.text(`Leak Report #${report.leak_number || '---'}`, margin, 15)
 
-  // Left side
-  doc.text(`Date: ${report.date || '_______'}`, 15, y)
-  doc.text(`Foreman: ${foremanEmployee?.name || report.supervisor || '_______'}`, 15, y + 7)
-  doc.text(`Supervisor: ${supervisorProfile?.name || '_______'}`, 15, y + 14)
-
-  // Right side
-  doc.text(`Project #: ${report.project_number || '_______'}`, pageWidth - 60, y)
-  doc.text(`Leak #: ${report.leak_number || '_______'}`, pageWidth - 60, y + 7)
-
-  y += 25
-
-  // Address
-  doc.text(`Address: ${report.address || '________________________________________________'}`, 15, y)
-  y += 10
-
-  // Horizontal line
-  doc.setDrawColor(...orange)
-  doc.setLineWidth(1)
-  doc.line(15, y, pageWidth - 15, y)
-  y += 8
-
-  // Job Type Section
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(11)
-  doc.text('Job Type:', 15, y)
-  doc.setFont('helvetica', 'normal')
+  // Date on right
   doc.setFontSize(10)
+  doc.text(report.date || '---', pageWidth - margin - doc.getTextWidth(report.date || '---'), 9)
 
-  const jobTypes = [
-    { key: 'regular_leak', label: 'REGULAR LEAK' },
-    { key: 'grade_1', label: 'GRADE 1' },
-    { key: 'laying_sod_cleanup', label: 'Laying Sod/Cleanup' }
-  ]
-  let xPos = 50
-  jobTypes.forEach(jt => {
-    const isChecked = report.job_type === jt.key
-    doc.rect(xPos, y - 4, 4, 4)
-    if (isChecked) { doc.setFillColor(...orange); doc.rect(xPos, y - 4, 4, 4, 'F') }
-    doc.text(jt.label, xPos + 6, y)
-    xPos += 45
-  })
-  y += 10
-
-  // Superintendent Classification (prominent box)
-  doc.setDrawColor(...orange)
-  doc.setLineWidth(0.5)
-  doc.rect(pageWidth - 75, y - 15, 60, 25)
+  // Classification badge
+  const classLabel = report.rate_type === 'all_hourly' ? 'HOURLY' : report.rate_type === 'unit_rates' ? 'UNIT' : report.rate_type === 'both' ? 'BOTH' : '---'
+  const badgeWidth = doc.getTextWidth(classLabel) + 8
+  doc.setFillColor(...white)
+  doc.roundedRect(pageWidth - margin - badgeWidth, 11, badgeWidth, 6, 1, 1, 'F')
   doc.setFontSize(8)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...orange)
-  doc.text('SUPERINTENDENT USE ONLY:', pageWidth - 73, y - 10)
-  doc.setTextColor(...black)
-  doc.setFontSize(9)
-  const rateTypes = [
-    { key: 'all_hourly', label: 'ALL HOURLY RATE' },
-    { key: 'unit_rates', label: 'UNIT RATES' },
-    { key: 'both', label: 'PARTIALLY HOURLY' }
-  ]
-  let rateY = y - 5
-  rateTypes.forEach(rt => {
-    const isChecked = report.rate_type === rt.key
-    doc.rect(pageWidth - 73, rateY - 3, 3, 3)
-    if (isChecked) { doc.setFillColor(...orange); doc.rect(pageWidth - 73, rateY - 3, 3, 3, 'F') }
-    doc.setFont('helvetica', 'normal')
-    doc.text(rt.label, pageWidth - 68, rateY)
-    rateY += 5
-  })
+  doc.text(classLabel, pageWidth - margin - badgeWidth + 4, 15.5)
 
-  // Grade 1 details if applicable
-  if (report.crew_called_off_to_grade_1 || report.leak_turned_into_grade_1) {
-    doc.setFontSize(9)
+  y = 26
+
+  // ========== ROW 1: JOB INFO + CREW (side by side) ==========
+  const row1Height = 28
+  drawCard(margin, y, colWidth, row1Height, 'JOB INFO')
+  drawCard(margin + colWidth + 6, y, colWidth, row1Height, 'CREW')
+
+  doc.setFontSize(8)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...darkGray)
+
+  // Job Info content
+  let leftY = y + 9
+  doc.text(`Project: ${report.project_number || '-'}`, margin + cardPadding, leftY)
+  doc.text(`Address: ${(report.address || '-').substring(0, 35)}${(report.address || '').length > 35 ? '...' : ''}`, margin + cardPadding, leftY + 5)
+  const jobTypeLabel = report.job_type === 'regular_leak' ? 'Regular Leak' : report.job_type === 'grade_1' ? 'Grade 1' : report.job_type === 'laying_sod_cleanup' ? 'Laying Sod/Cleanup' : '-'
+  doc.text(`Job Type: ${jobTypeLabel}`, margin + cardPadding, leftY + 10)
+
+  // Crew content
+  let rightY = y + 9
+  const rightX = margin + colWidth + 6 + cardPadding
+  doc.text(`Crew: ${crew?.name || '-'}`, rightX, rightY)
+  doc.text(`Foreman: ${foremanEmployee?.name || '-'}`, rightX, rightY + 5)
+  doc.text(`Supervisor: ${supervisorProfile?.name || '-'}`, rightX, rightY + 10)
+  doc.text(`Start: ${report.crew_start_time || '-'}  End: ${report.crew_end_time || '-'}`, rightX, rightY + 15)
+
+  y += row1Height + 4
+
+  // ========== LEAK DETAILS (if regular leak) ==========
+  if (report.job_type === 'regular_leak') {
+    const leakCardHeight = 38
+    drawCard(margin, y, pageWidth - margin * 2, leakCardHeight, 'LEAK DETAILS')
+
+    doc.setFontSize(8)
+    doc.setTextColor(...darkGray)
+
+    let detailY = y + 9
+    const leakType = report.leak_type === 'main' ? 'Main' : report.leak_type === 'service' ? 'Service' : '-'
+    const pipeType = report.pipe_type === 'steel' ? 'Steel' : report.pipe_type === 'poly' ? 'Poly' : '-'
+    doc.text(`Type: ${leakType} / ${pipeType}`, margin + cardPadding, detailY)
+
+    // Replacements
+    const reps = []
+    if (report.short_side) reps.push(`Short Side${report.short_side_qty ? ` (${report.short_side_qty})` : ''}`)
+    if (report.long_side) reps.push(`Long Side${report.long_side_qty ? ` (${report.long_side_qty})` : ''}`)
+    if (report.insert_replacement) reps.push(`Insert${report.insert_qty ? ` (${report.insert_qty})` : ''}`)
+    if (report.retirement) reps.push(`Retirement${report.retirement_qty ? ` (${report.retirement_qty})` : ''}`)
+    doc.text(`Replacements: ${reps.length > 0 ? reps.join(', ') : 'None'}`, margin + cardPadding + 55, detailY)
+
+    // Checkmark items - 3 columns
+    detailY += 7
+    const checks = [
+      { label: 'Leak Located', value: report.leak_located },
+      { label: 'Section out main', value: report.section_out_main },
+      { label: 'Street Plates', value: report.street_plates_used },
+      { label: 'Before arrival', value: report.leak_located_before_arrival },
+      { label: 'Excessive Haul', value: report.excessive_haul_off },
+      { label: 'Rock in Bellhole', value: report.rock_in_bellhole },
+      { label: '>25 min locate', value: report.took_over_25_min_to_locate },
+      { label: 'Excessive restore', value: report.excessive_restoration },
+      { label: 'Downtown paving', value: report.downtown_extensive_paving },
+      { label: 'Vac Truck', value: report.vac_truck_used },
+      { label: 'Traffic control', value: report.increased_traffic_control },
+    ]
+
+    checks.forEach((c, i) => {
+      const col = i % 3
+      const row = Math.floor(i / 3)
+      const cX = margin + cardPadding + (col * 62)
+      const cY = detailY + (row * 5)
+      doc.setTextColor(...checkColor(c.value))
+      doc.setFont('helvetica', 'bold')
+      doc.text(checkMark(c.value), cX, cY)
+      doc.setTextColor(...darkGray)
+      doc.setFont('helvetica', 'normal')
+      doc.text(c.label, cX + 5, cY)
+    })
+
+    y += leakCardHeight + 4
+  }
+
+  // ========== GRADE 1 INFO (if applicable) ==========
+  if (report.job_type === 'grade_1' || report.crew_called_off_to_grade_1 || report.leak_turned_into_grade_1) {
+    const g1Height = 14
+    drawCard(margin, y, pageWidth - margin * 2, g1Height, 'GRADE 1 INFO')
+    doc.setFontSize(8)
+    doc.setTextColor(...darkGray)
+    let g1Y = y + 9
     if (report.crew_called_off_to_grade_1) {
-      doc.rect(15, y - 3, 3, 3); doc.setFillColor(...orange); doc.rect(15, y - 3, 3, 3, 'F')
-      doc.text(`Crew Called Off to GRADE 1 - Time: ${report.time_called_off_to_grade_1 || '___'}`, 20, y)
-      y += 6
+      doc.text(`Crew Called Off to Grade 1: ${report.time_called_off_to_grade_1 || '-'}`, margin + cardPadding, g1Y)
     }
     if (report.leak_turned_into_grade_1) {
-      doc.rect(15, y - 3, 3, 3); doc.setFillColor(...orange); doc.rect(15, y - 3, 3, 3, 'F')
-      doc.text(`Leak Turned into GRADE 1 - Time: ${report.time_leak_turned_grade_1 || '___'}`, 20, y)
-      y += 6
+      doc.text(`Leak Turned into Grade 1: ${report.time_leak_turned_grade_1 || '-'}`, margin + cardPadding + 80, g1Y)
     }
-  }
-  y += 5
-
-  // Regular Leak Section
-  if (report.job_type === 'regular_leak') {
-    doc.setDrawColor(...lightGray)
-    doc.setLineWidth(0.3)
-    doc.line(15, y, pageWidth - 15, y)
-    y += 6
-
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(10)
-    doc.setTextColor(...orange)
-    doc.text('If REGULAR LEAK then check "YES" or "NO" for all that applies:', 15, y)
-    doc.setTextColor(...black)
-    y += 7
-
-    const yesNo = (val) => val === true ? 'YES' : val === false ? 'NO' : '-'
-    const drawYesNo = (label, value, xStart, yPos) => {
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(9)
-      doc.text(label, xStart, yPos)
-      const labelWidth = doc.getTextWidth(label)
-      doc.setFont('helvetica', 'bold')
-      doc.text(yesNo(value), xStart + labelWidth + 3, yPos)
-    }
-
-    // Left column questions
-    drawYesNo('Leak Located?', report.leak_located, 15, y)
-    drawYesNo('Leak Located before arrival?', report.leak_located_before_arrival, 15, y + 6)
-    if (report.leak_located === false) {
-      drawYesNo('Over 25 min to locate?', report.took_over_25_min_to_locate, 15, y + 12)
-    }
-
-    // Type of Leak / Pipe Type
-    y += 20
-    doc.setFont('helvetica', 'normal')
-    doc.text(`Type of Leak: ${report.leak_type === 'main' ? 'MAIN' : report.leak_type === 'service' ? 'SERVICE' : '-'}`, 15, y)
-    doc.text(`Pipe Type: ${report.pipe_type === 'steel' ? 'STEEL' : report.pipe_type === 'poly' ? 'POLY' : '-'}`, 80, y)
-    y += 8
-
-    // Type of Replacement
-    doc.setFont('helvetica', 'bold')
-    doc.text('Type of Replacement:', 15, y)
-    doc.setFont('helvetica', 'normal')
-    y += 6
-    const replacements = [
-      { label: 'Short Side', checked: report.short_side, qty: report.short_side_qty },
-      { label: 'Long Side', checked: report.long_side, qty: report.long_side_qty },
-      { label: 'Insert', checked: report.insert_replacement, qty: report.insert_qty },
-      { label: 'Retirement', checked: report.retirement, qty: report.retirement_qty }
-    ]
-    xPos = 15
-    replacements.forEach(r => {
-      doc.rect(xPos, y - 3, 3, 3)
-      if (r.checked) { doc.setFillColor(...orange); doc.rect(xPos, y - 3, 3, 3, 'F') }
-      doc.text(`${r.label}${r.qty ? ` (${r.qty})` : ''}`, xPos + 5, y)
-      xPos += 40
-    })
-    y += 10
-
-    // Yes/No questions in two columns
-    const questions = [
-      { label: 'Section out main?', value: report.section_out_main },
-      { label: 'Excessive Haul Off?', value: report.excessive_haul_off },
-      { label: 'Excessive restoration?', value: report.excessive_restoration },
-      { label: 'Downtown extensive paving?', value: report.downtown_extensive_paving },
-      { label: 'Increased Traffic control?', value: report.increased_traffic_control },
-      { label: 'Rock in Bellhole?', value: report.rock_in_bellhole },
-      { label: 'Street Plates Used?', value: report.street_plates_used },
-      { label: 'Vac Truck Used?', value: report.vac_truck_used }
-    ]
-
-    questions.forEach((q, i) => {
-      const col = i % 2
-      const row = Math.floor(i / 2)
-      drawYesNo(q.label, q.value, col === 0 ? 15 : 105, y + (row * 6))
-    })
-    y += Math.ceil(questions.length / 2) * 6 + 5
+    y += g1Height + 4
   }
 
-  // Downtime Due to Atmos
-  doc.setDrawColor(...lightGray)
-  doc.line(15, y, pageWidth - 15, y)
-  y += 6
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(10)
-  doc.setTextColor(...orange)
-  doc.text('Downtime Due to Atmos:', 15, y)
-  doc.setTextColor(...black)
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(9)
-  y += 6
+  // ========== ROW 2: EQUIPMENT + ADDERS (side by side) ==========
+  const hasWelder = report.welder_used
+  const hasBore = report.bore_used
+  const equipHeight = hasBore ? 24 : 18
+  drawCard(margin, y, colWidth, equipHeight, 'EQUIPMENT')
+  drawCard(margin + colWidth + 6, y, colWidth, equipHeight, 'ADDERS')
 
+  doc.setFontSize(8)
+  doc.setTextColor(...darkGray)
+
+  // Equipment content
+  let equipY = y + 9
+  if (hasWelder) {
+    const welderType = report.welder_type === 'bobcat_welder' ? 'Bobcat Welder' : 'Subbed Out'
+    doc.text(`Welder: ${welderType}`, margin + cardPadding, equipY)
+    equipY += 5
+  } else {
+    doc.text('Welder: No', margin + cardPadding, equipY)
+    equipY += 5
+  }
+  if (hasBore) {
+    const boreType = report.bore_type === 'bobcat_bore' ? 'Bobcat Bore' : 'Subbed Out'
+    doc.text(`Bore: ${boreType}`, margin + cardPadding, equipY)
+    equipY += 5
+    const soilType = report.soil_type === 'dirt' ? 'Dirt' : report.soil_type === 'rock' ? 'Rock' : '-'
+    doc.text(`  → ${soilType}, ${report.bore_size_inches || '-'}", ${report.bore_footage || '-'} ft`, margin + cardPadding, equipY)
+  } else {
+    doc.text('Bore: No', margin + cardPadding, equipY)
+  }
+  doc.text(`Vac Truck: ${report.vac_truck_used ? 'Yes' : 'No'}`, margin + cardPadding + 50, y + 9)
+
+  // Adders content
+  let adderY = y + 9
+  const adderX = margin + colWidth + 6 + cardPadding
+  doc.text(`NoBlowKit ${report.no_blow_kit ? `.......... ${report.no_blow_kit_qty || '-'}` : '.......... -'}`, adderX, adderY)
+  doc.text(`2"-4" Short Stop ${report.short_stop_2_4 ? `... ${report.short_stop_2_4_qty || '-'}` : '... -'}`, adderX, adderY + 5)
+  doc.text(`6"+ Short Stop ${report.short_stop_6_plus ? `..... ${report.short_stop_6_plus_qty || '-'}` : '..... -'}`, adderX, adderY + 10)
+
+  y += equipHeight + 4
+
+  // ========== DOWNTIME (if any) ==========
   const downtimePeriods = typeof report.downtime_periods === 'string'
     ? JSON.parse(report.downtime_periods || '[]')
     : (report.downtime_periods || [])
 
   if (downtimePeriods.length > 0) {
-    downtimePeriods.forEach((p, i) => {
-      doc.text(`Start: ${p.start || '___'}  End: ${p.end || '___'}`, 20, y)
-      y += 5
+    const dtHeight = 8 + (downtimePeriods.length * 5)
+    drawCard(margin, y, pageWidth - margin * 2, dtHeight, 'DOWNTIME (Atmos)')
+    doc.setFontSize(8)
+    doc.setTextColor(...darkGray)
+    let dtY = y + 9
+    downtimePeriods.forEach((p) => {
+      doc.text(`${p.start || '-'} - ${p.end || '-'}`, margin + cardPadding, dtY)
+      dtY += 5
     })
+    y += dtHeight + 4
+  }
+
+  // ========== NOTES (if any) ==========
+  if (report.notes || (report.rate_type === 'both' && report.rate_type_notes)) {
+    const noteText = report.notes || ''
+    const classNote = report.rate_type === 'both' && report.rate_type_notes ? `[Classification: ${report.rate_type_notes}]` : ''
+    const fullNote = [noteText, classNote].filter(Boolean).join(' ')
+    const splitNotes = doc.splitTextToSize(fullNote, pageWidth - margin * 2 - cardPadding * 2)
+    const notesHeight = 8 + (splitNotes.length * 4)
+    drawCard(margin, y, pageWidth - margin * 2, notesHeight, 'NOTES')
+    doc.setFontSize(8)
+    doc.setTextColor(...darkGray)
+    doc.text(splitNotes, margin + cardPadding, y + 9)
+    y += notesHeight + 4
+  }
+
+  // ========== FOOTER: Repair Completed ==========
+  doc.setFontSize(9)
+  doc.setFont('helvetica', 'bold')
+  const repairStatus = report.leak_repair_completed ? '✓ YES' : report.leak_repair_completed === false ? '✗ NO' : '-'
+  if (report.leak_repair_completed) {
+    doc.setTextColor(...green)
+  } else if (report.leak_repair_completed === false) {
+    doc.setTextColor(...red)
   } else {
-    doc.text('None recorded', 20, y)
-    y += 5
+    doc.setTextColor(...darkGray)
   }
-  y += 5
-
-  // Adders Used
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(10)
-  doc.setTextColor(...orange)
-  doc.text('Adders Used:', 15, y)
-  doc.setTextColor(...black)
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(9)
-  y += 6
-
-  const adders = [
-    { label: 'NoBlowKit', checked: report.no_blow_kit, qty: report.no_blow_kit_qty },
-    { label: '2"-4" Short Stop', checked: report.short_stop_2_4, qty: report.short_stop_2_4_qty },
-    { label: '6"+ Short Stop', checked: report.short_stop_6_plus, qty: report.short_stop_6_plus_qty }
-  ]
-  adders.forEach(a => {
-    doc.rect(15, y - 3, 3, 3)
-    if (a.checked) { doc.setFillColor(...orange); doc.rect(15, y - 3, 3, 3, 'F') }
-    doc.text(`${a.label}${a.qty ? ` - Qty: ${a.qty}` : ''}`, 20, y)
-    y += 5
-  })
-  y += 5
-
-  // Welder Used
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(10)
-  doc.text('Welder Used?', 15, y)
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(9)
-  doc.text(report.welder_used ? `YES - ${report.welder_type === 'bobcat_welder' ? 'Bobcat Welder' : 'Subbed Out Welder'}` : 'NO', 55, y)
-  y += 8
-
-  // Bore Used
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(10)
-  doc.text('Bore Used?', 15, y)
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(9)
-  if (report.bore_used) {
-    doc.text(`YES - ${report.bore_type === 'bobcat_bore' ? 'Bobcat Bore' : 'Subbed Out Bore'}`, 50, y)
-    y += 5
-    doc.text(`Soil Type: ${report.soil_type === 'dirt' ? 'Dirt' : report.soil_type === 'rock' ? 'Rock' : '-'}  |  Bore Size: ${report.bore_size_inches || '-'} inch  |  Bore Footage: ${report.bore_footage || '-'} ft`, 20, y)
-  } else {
-    doc.text('NO', 50, y)
-  }
-  y += 10
-
-  // Crew Times
-  doc.setDrawColor(...orange)
-  doc.setLineWidth(0.5)
-  doc.line(15, y, pageWidth - 15, y)
-  y += 8
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(11)
-  doc.setTextColor(...orange)
-  doc.text('Crew Start Time:', 15, y)
-  doc.text('Crew End Time:', 100, y)
-  doc.setTextColor(...black)
-  doc.setFontSize(10)
-  doc.text(report.crew_start_time || '___:___', 60, y)
-  doc.text(report.crew_end_time || '___:___', 145, y)
-  y += 10
-
-  // Leak Repair Completed
-  doc.setFont('helvetica', 'normal')
-  doc.text(`Leak Repair Completed: ${report.leak_repair_completed ? 'YES' : report.leak_repair_completed === false ? 'NO' : '-'}`, 15, y)
-  y += 10
-
-  // Notes
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(10)
-  doc.setTextColor(...orange)
-  doc.text('Notes:', 15, y)
-  doc.setTextColor(...black)
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(9)
-  y += 6
-
-  if (report.notes) {
-    const splitNotes = doc.splitTextToSize(report.notes, pageWidth - 40)
-    doc.text(splitNotes, 15, y)
-    y += splitNotes.length * 4 + 5
-  }
-
-  // Classification notes if "both"
-  if (report.rate_type === 'both' && report.rate_type_notes) {
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(...orange)
-    doc.text('Classification Notes (Partially Hourly):', 15, y)
-    doc.setTextColor(...black)
-    doc.setFont('helvetica', 'normal')
-    y += 5
-    const splitClassNotes = doc.splitTextToSize(report.rate_type_notes, pageWidth - 40)
-    doc.text(splitClassNotes, 15, y)
-  }
+  doc.text(`Repair Completed: ${repairStatus}`, pageWidth - margin - 45, y + 2)
 
   return doc
 }
