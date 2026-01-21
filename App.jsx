@@ -28,7 +28,7 @@ const Badge = ({ children, variant = 'default' }) => {
   )
 }
 
-const Button = ({ children, onClick, variant = 'primary', size = 'md', disabled = false, loading = false, className = '' }) => {
+const Button = ({ children, onClick, variant = 'primary', size = 'md', disabled = false, loading = false, className = '', type = 'button' }) => {
   const variants = {
     primary: 'bg-amber-500 hover:bg-amber-400 text-zinc-900 font-semibold',
     secondary: 'bg-zinc-700 hover:bg-zinc-600 text-zinc-200',
@@ -42,6 +42,7 @@ const Button = ({ children, onClick, variant = 'primary', size = 'md', disabled 
   }
   return (
     <button
+      type={type}
       onClick={onClick}
       disabled={disabled || loading}
       className={`rounded-lg transition-all duration-200 ${variants[variant]} ${sizes[size]} ${disabled || loading ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
@@ -194,18 +195,20 @@ const Icons = {
 const LoginScreen = () => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const handleLogin = async () => {
+  const handleLogin = async (e) => {
+    if (e) e.preventDefault()
     setLoading(true)
     setError('')
-    
+
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
-    
+
     if (error) {
       setError(error.message)
     }
@@ -215,7 +218,7 @@ const LoginScreen = () => {
   return (
     <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-amber-900/20 via-zinc-950 to-zinc-950" />
-      
+
       <Card className="w-full max-w-md relative z-10 border-zinc-700/50">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-amber-500 rounded-2xl mb-4 shadow-lg shadow-amber-500/20">
@@ -225,7 +228,7 @@ const LoginScreen = () => {
           <p className="text-zinc-500 mt-1">Sign in to continue</p>
         </div>
 
-        <div className="space-y-4">
+        <form onSubmit={handleLogin} className="space-y-4">
           <Input
             label="Email"
             type="email"
@@ -233,24 +236,45 @@ const LoginScreen = () => {
             onChange={(e) => setEmail(e.target.value)}
             placeholder="your@email.com"
           />
-          <Input
-            label="Password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-          />
-          
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm text-zinc-400 font-medium">Password</label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 pr-12 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-200 transition-colors"
+              >
+                {showPassword ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                  </svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                )}
+              </button>
+            </div>
+          </div>
+
           {error && (
             <p className="text-red-400 text-sm bg-red-900/20 border border-red-800 rounded-lg px-3 py-2">
               {error}
             </p>
           )}
-          
-          <Button onClick={handleLogin} loading={loading} className="w-full mt-6">
+
+          <Button type="submit" loading={loading} className="w-full mt-6">
             Sign In
           </Button>
-        </div>
+        </form>
       </Card>
     </div>
   )
