@@ -1,5 +1,7 @@
 import React, { useState, useEffect, createContext, useContext } from 'react'
 import { supabase } from './supabaseClient'
+import { jsPDF } from 'jspdf'
+import JSZip from 'jszip'
 
 // =============================================
 // CONTEXT
@@ -308,6 +310,11 @@ const Icons = {
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+  ),
+  Download: () => (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
     </svg>
   ),
 }
@@ -2226,10 +2233,366 @@ const SupervisorReviewView = ({ leakReports, crews, profile, onRefresh }) => {
 }
 
 // =============================================
+// PDF GENERATION HELPERS
+// =============================================
+
+const generateLeakReportPDF = (report, crew, supervisorProfile, foremanEmployee) => {
+  const doc = new jsPDF()
+  const pageWidth = doc.internal.pageSize.getWidth()
+
+  // Colors matching the Bobcat branding
+  const orange = [230, 126, 34]
+  const black = [0, 0, 0]
+  const gray = [100, 100, 100]
+  const lightGray = [200, 200, 200]
+
+  let y = 15
+
+  // Header - Bobcat Contracting L.L.C.
+  doc.setFontSize(24)
+  doc.setTextColor(...orange)
+  doc.setFont('helvetica', 'bold')
+  doc.text('BOBCAT', pageWidth / 2 - 25, y)
+  doc.setFontSize(10)
+  doc.text('CONTRACTING L.L.C.', pageWidth / 2 - 18, y + 6)
+
+  // Header info boxes
+  doc.setTextColor(...black)
+  doc.setFontSize(10)
+  doc.setFont('helvetica', 'normal')
+
+  // Left side
+  doc.text(`Date: ${report.date || '_______'}`, 15, y)
+  doc.text(`Foreman: ${foremanEmployee?.name || report.supervisor || '_______'}`, 15, y + 7)
+  doc.text(`Supervisor: ${supervisorProfile?.name || '_______'}`, 15, y + 14)
+
+  // Right side
+  doc.text(`Project #: ${report.project_number || '_______'}`, pageWidth - 60, y)
+  doc.text(`Leak #: ${report.leak_number || '_______'}`, pageWidth - 60, y + 7)
+
+  y += 25
+
+  // Address
+  doc.text(`Address: ${report.address || '________________________________________________'}`, 15, y)
+  y += 10
+
+  // Horizontal line
+  doc.setDrawColor(...orange)
+  doc.setLineWidth(1)
+  doc.line(15, y, pageWidth - 15, y)
+  y += 8
+
+  // Job Type Section
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(11)
+  doc.text('Job Type:', 15, y)
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(10)
+
+  const jobTypes = [
+    { key: 'regular_leak', label: 'REGULAR LEAK' },
+    { key: 'grade_1', label: 'GRADE 1' },
+    { key: 'laying_sod_cleanup', label: 'Laying Sod/Cleanup' }
+  ]
+  let xPos = 50
+  jobTypes.forEach(jt => {
+    const isChecked = report.job_type === jt.key
+    doc.rect(xPos, y - 4, 4, 4)
+    if (isChecked) { doc.setFillColor(...orange); doc.rect(xPos, y - 4, 4, 4, 'F') }
+    doc.text(jt.label, xPos + 6, y)
+    xPos += 45
+  })
+  y += 10
+
+  // Superintendent Classification (prominent box)
+  doc.setDrawColor(...orange)
+  doc.setLineWidth(0.5)
+  doc.rect(pageWidth - 75, y - 15, 60, 25)
+  doc.setFontSize(8)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...orange)
+  doc.text('SUPERINTENDENT USE ONLY:', pageWidth - 73, y - 10)
+  doc.setTextColor(...black)
+  doc.setFontSize(9)
+  const rateTypes = [
+    { key: 'all_hourly', label: 'ALL HOURLY RATE' },
+    { key: 'unit_rates', label: 'UNIT RATES' },
+    { key: 'both', label: 'PARTIALLY HOURLY' }
+  ]
+  let rateY = y - 5
+  rateTypes.forEach(rt => {
+    const isChecked = report.rate_type === rt.key
+    doc.rect(pageWidth - 73, rateY - 3, 3, 3)
+    if (isChecked) { doc.setFillColor(...orange); doc.rect(pageWidth - 73, rateY - 3, 3, 3, 'F') }
+    doc.setFont('helvetica', 'normal')
+    doc.text(rt.label, pageWidth - 68, rateY)
+    rateY += 5
+  })
+
+  // Grade 1 details if applicable
+  if (report.crew_called_off_to_grade_1 || report.leak_turned_into_grade_1) {
+    doc.setFontSize(9)
+    if (report.crew_called_off_to_grade_1) {
+      doc.rect(15, y - 3, 3, 3); doc.setFillColor(...orange); doc.rect(15, y - 3, 3, 3, 'F')
+      doc.text(`Crew Called Off to GRADE 1 - Time: ${report.time_called_off_to_grade_1 || '___'}`, 20, y)
+      y += 6
+    }
+    if (report.leak_turned_into_grade_1) {
+      doc.rect(15, y - 3, 3, 3); doc.setFillColor(...orange); doc.rect(15, y - 3, 3, 3, 'F')
+      doc.text(`Leak Turned into GRADE 1 - Time: ${report.time_leak_turned_grade_1 || '___'}`, 20, y)
+      y += 6
+    }
+  }
+  y += 5
+
+  // Regular Leak Section
+  if (report.job_type === 'regular_leak') {
+    doc.setDrawColor(...lightGray)
+    doc.setLineWidth(0.3)
+    doc.line(15, y, pageWidth - 15, y)
+    y += 6
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(10)
+    doc.setTextColor(...orange)
+    doc.text('If REGULAR LEAK then check "YES" or "NO" for all that applies:', 15, y)
+    doc.setTextColor(...black)
+    y += 7
+
+    const yesNo = (val) => val === true ? 'YES' : val === false ? 'NO' : '-'
+    const drawYesNo = (label, value, xStart, yPos) => {
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(9)
+      doc.text(label, xStart, yPos)
+      const labelWidth = doc.getTextWidth(label)
+      doc.setFont('helvetica', 'bold')
+      doc.text(yesNo(value), xStart + labelWidth + 3, yPos)
+    }
+
+    // Left column questions
+    drawYesNo('Leak Located?', report.leak_located, 15, y)
+    drawYesNo('Leak Located before arrival?', report.leak_located_before_arrival, 15, y + 6)
+    if (report.leak_located === false) {
+      drawYesNo('Over 25 min to locate?', report.took_over_25_min_to_locate, 15, y + 12)
+    }
+
+    // Type of Leak / Pipe Type
+    y += 20
+    doc.setFont('helvetica', 'normal')
+    doc.text(`Type of Leak: ${report.leak_type === 'main' ? 'MAIN' : report.leak_type === 'service' ? 'SERVICE' : '-'}`, 15, y)
+    doc.text(`Pipe Type: ${report.pipe_type === 'steel' ? 'STEEL' : report.pipe_type === 'poly' ? 'POLY' : '-'}`, 80, y)
+    y += 8
+
+    // Type of Replacement
+    doc.setFont('helvetica', 'bold')
+    doc.text('Type of Replacement:', 15, y)
+    doc.setFont('helvetica', 'normal')
+    y += 6
+    const replacements = [
+      { label: 'Short Side', checked: report.short_side, qty: report.short_side_qty },
+      { label: 'Long Side', checked: report.long_side, qty: report.long_side_qty },
+      { label: 'Insert', checked: report.insert_replacement, qty: report.insert_qty },
+      { label: 'Retirement', checked: report.retirement, qty: report.retirement_qty }
+    ]
+    xPos = 15
+    replacements.forEach(r => {
+      doc.rect(xPos, y - 3, 3, 3)
+      if (r.checked) { doc.setFillColor(...orange); doc.rect(xPos, y - 3, 3, 3, 'F') }
+      doc.text(`${r.label}${r.qty ? ` (${r.qty})` : ''}`, xPos + 5, y)
+      xPos += 40
+    })
+    y += 10
+
+    // Yes/No questions in two columns
+    const questions = [
+      { label: 'Section out main?', value: report.section_out_main },
+      { label: 'Excessive Haul Off?', value: report.excessive_haul_off },
+      { label: 'Excessive restoration?', value: report.excessive_restoration },
+      { label: 'Downtown extensive paving?', value: report.downtown_extensive_paving },
+      { label: 'Increased Traffic control?', value: report.increased_traffic_control },
+      { label: 'Rock in Bellhole?', value: report.rock_in_bellhole },
+      { label: 'Street Plates Used?', value: report.street_plates_used },
+      { label: 'Vac Truck Used?', value: report.vac_truck_used }
+    ]
+
+    questions.forEach((q, i) => {
+      const col = i % 2
+      const row = Math.floor(i / 2)
+      drawYesNo(q.label, q.value, col === 0 ? 15 : 105, y + (row * 6))
+    })
+    y += Math.ceil(questions.length / 2) * 6 + 5
+  }
+
+  // Downtime Due to Atmos
+  doc.setDrawColor(...lightGray)
+  doc.line(15, y, pageWidth - 15, y)
+  y += 6
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(10)
+  doc.setTextColor(...orange)
+  doc.text('Downtime Due to Atmos:', 15, y)
+  doc.setTextColor(...black)
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  y += 6
+
+  const downtimePeriods = typeof report.downtime_periods === 'string'
+    ? JSON.parse(report.downtime_periods || '[]')
+    : (report.downtime_periods || [])
+
+  if (downtimePeriods.length > 0) {
+    downtimePeriods.forEach((p, i) => {
+      doc.text(`Start: ${p.start || '___'}  End: ${p.end || '___'}`, 20, y)
+      y += 5
+    })
+  } else {
+    doc.text('None recorded', 20, y)
+    y += 5
+  }
+  y += 5
+
+  // Adders Used
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(10)
+  doc.setTextColor(...orange)
+  doc.text('Adders Used:', 15, y)
+  doc.setTextColor(...black)
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  y += 6
+
+  const adders = [
+    { label: 'NoBlowKit', checked: report.no_blow_kit, qty: report.no_blow_kit_qty },
+    { label: '2"-4" Short Stop', checked: report.short_stop_2_4, qty: report.short_stop_2_4_qty },
+    { label: '6"+ Short Stop', checked: report.short_stop_6_plus, qty: report.short_stop_6_plus_qty }
+  ]
+  adders.forEach(a => {
+    doc.rect(15, y - 3, 3, 3)
+    if (a.checked) { doc.setFillColor(...orange); doc.rect(15, y - 3, 3, 3, 'F') }
+    doc.text(`${a.label}${a.qty ? ` - Qty: ${a.qty}` : ''}`, 20, y)
+    y += 5
+  })
+  y += 5
+
+  // Welder Used
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(10)
+  doc.text('Welder Used?', 15, y)
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  doc.text(report.welder_used ? `YES - ${report.welder_type === 'bobcat_welder' ? 'Bobcat Welder' : 'Subbed Out Welder'}` : 'NO', 55, y)
+  y += 8
+
+  // Bore Used
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(10)
+  doc.text('Bore Used?', 15, y)
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  if (report.bore_used) {
+    doc.text(`YES - ${report.bore_type === 'bobcat_bore' ? 'Bobcat Bore' : 'Subbed Out Bore'}`, 50, y)
+    y += 5
+    doc.text(`Soil Type: ${report.soil_type === 'dirt' ? 'Dirt' : report.soil_type === 'rock' ? 'Rock' : '-'}  |  Bore Size: ${report.bore_size_inches || '-'} inch  |  Bore Footage: ${report.bore_footage || '-'} ft`, 20, y)
+  } else {
+    doc.text('NO', 50, y)
+  }
+  y += 10
+
+  // Crew Times
+  doc.setDrawColor(...orange)
+  doc.setLineWidth(0.5)
+  doc.line(15, y, pageWidth - 15, y)
+  y += 8
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(11)
+  doc.setTextColor(...orange)
+  doc.text('Crew Start Time:', 15, y)
+  doc.text('Crew End Time:', 100, y)
+  doc.setTextColor(...black)
+  doc.setFontSize(10)
+  doc.text(report.crew_start_time || '___:___', 60, y)
+  doc.text(report.crew_end_time || '___:___', 145, y)
+  y += 10
+
+  // Leak Repair Completed
+  doc.setFont('helvetica', 'normal')
+  doc.text(`Leak Repair Completed: ${report.leak_repair_completed ? 'YES' : report.leak_repair_completed === false ? 'NO' : '-'}`, 15, y)
+  y += 10
+
+  // Notes
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(10)
+  doc.setTextColor(...orange)
+  doc.text('Notes:', 15, y)
+  doc.setTextColor(...black)
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  y += 6
+
+  if (report.notes) {
+    const splitNotes = doc.splitTextToSize(report.notes, pageWidth - 40)
+    doc.text(splitNotes, 15, y)
+    y += splitNotes.length * 4 + 5
+  }
+
+  // Classification notes if "both"
+  if (report.rate_type === 'both' && report.rate_type_notes) {
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...orange)
+    doc.text('Classification Notes (Partially Hourly):', 15, y)
+    doc.setTextColor(...black)
+    doc.setFont('helvetica', 'normal')
+    y += 5
+    const splitClassNotes = doc.splitTextToSize(report.rate_type_notes, pageWidth - 40)
+    doc.text(splitClassNotes, 15, y)
+  }
+
+  return doc
+}
+
+const getInitials = (name) => {
+  if (!name) return 'XX'
+  return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+}
+
+const exportReportsAsZip = async (reports, crews, profiles, employees) => {
+  const zip = new JSZip()
+
+  for (const report of reports) {
+    const crew = crews.find(c => c.id === report.crew_id)
+    const supervisorProfile = crew?.supervisor_id ? profiles.find(p => p.id === crew.supervisor_id) : null
+    const foremanEmployee = crew?.foreman_id ? employees.find(e => e.id === crew.foreman_id) : null
+
+    const doc = generateLeakReportPDF(report, crew, supervisorProfile, foremanEmployee)
+    const pdfBlob = doc.output('blob')
+
+    // Filename: SupervisorInitials_ForemanName_Date.pdf
+    const supInitials = getInitials(supervisorProfile?.name)
+    const foremanName = (foremanEmployee?.name || 'Unknown').replace(/\s+/g, '')
+    const dateStr = report.date || 'NoDate'
+    const filename = `${supInitials}_${foremanName}_${dateStr}.pdf`
+
+    zip.file(filename, pdfBlob)
+  }
+
+  const content = await zip.generateAsync({ type: 'blob' })
+
+  // Trigger download
+  const url = URL.createObjectURL(content)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `LeakReports_${new Date().toISOString().split('T')[0]}.zip`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+// =============================================
 // ADMIN LEAK REPORTS VIEW
 // =============================================
 
-const AdminLeakReportsView = ({ leakReports, crews, profiles, onRefresh }) => {
+const AdminLeakReportsView = ({ leakReports, crews, profiles, onRefresh, employees }) => {
   const [activeSupervisor, setActiveSupervisor] = useState('all')
   const [activeWeek, setActiveWeek] = useState('all')
   const [viewingReport, setViewingReport] = useState(null)
@@ -2238,6 +2601,16 @@ const AdminLeakReportsView = ({ leakReports, crews, profiles, onRefresh }) => {
   const [classification, setClassification] = useState('')
   const [classificationNotes, setClassificationNotes] = useState('')
   const [loading, setLoading] = useState(false)
+
+  // Export modal state
+  const [showExportModal, setShowExportModal] = useState(false)
+  const [exportLoading, setExportLoading] = useState(false)
+  const [exportFilters, setExportFilters] = useState({
+    startDate: '',
+    endDate: '',
+    supervisors: [],
+    classification: 'all' // all, all_hourly, unit_rates, both
+  })
 
   // Get Monday of a given date's week
   const getWeekMonday = (dateStr) => {
@@ -2324,9 +2697,82 @@ const AdminLeakReportsView = ({ leakReports, crews, profiles, onRefresh }) => {
     setLoading(false)
   }
 
+  // Export current view
+  const handleExportCurrentView = async () => {
+    if (displayReports.length === 0) { alert('No reports to export'); return }
+    setExportLoading(true)
+    try {
+      await exportReportsAsZip(displayReports, crews, profiles, employees)
+    } catch (err) {
+      alert('Export failed: ' + err.message)
+    }
+    setExportLoading(false)
+  }
+
+  // Export with filters
+  const handleExportWithFilters = async () => {
+    let filtered = [...leakReports]
+
+    // Filter by date range
+    if (exportFilters.startDate) {
+      filtered = filtered.filter(r => r.date >= exportFilters.startDate)
+    }
+    if (exportFilters.endDate) {
+      filtered = filtered.filter(r => r.date <= exportFilters.endDate)
+    }
+
+    // Filter by supervisors
+    if (exportFilters.supervisors.length > 0) {
+      filtered = filtered.filter(r => {
+        const supId = getReportSupervisor(r)
+        return exportFilters.supervisors.includes(supId)
+      })
+    }
+
+    // Filter by classification
+    if (exportFilters.classification !== 'all') {
+      filtered = filtered.filter(r => r.rate_type === exportFilters.classification)
+    }
+
+    if (filtered.length === 0) { alert('No reports match the selected filters'); return }
+
+    setExportLoading(true)
+    try {
+      await exportReportsAsZip(filtered, crews, profiles, employees)
+      setShowExportModal(false)
+    } catch (err) {
+      alert('Export failed: ' + err.message)
+    }
+    setExportLoading(false)
+  }
+
+  const toggleSupervisorFilter = (supId) => {
+    setExportFilters(prev => ({
+      ...prev,
+      supervisors: prev.supervisors.includes(supId)
+        ? prev.supervisors.filter(id => id !== supId)
+        : [...prev.supervisors, supId]
+    }))
+  }
+
   return (
     <div className="space-y-6">
-      <div><h1 className="text-2xl font-bold text-zinc-100">All Leak Reports</h1><p className="text-zinc-500">{leakReports.length} total</p></div>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-zinc-100">All Leak Reports</h1>
+          <p className="text-zinc-500">{leakReports.length} total</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={() => setShowExportModal(true)}>
+            <span className="flex items-center gap-2"><Icons.Download /> Export with Filters</span>
+          </Button>
+          {(activeSupervisor !== 'all' || activeWeek !== 'all') && displayReports.length > 0 && (
+            <Button variant="primary" onClick={handleExportCurrentView} loading={exportLoading}>
+              <span className="flex items-center gap-2"><Icons.Download /> Export Current View ({displayReports.length})</span>
+            </Button>
+          )}
+        </div>
+      </div>
 
       {/* Supervisor Tabs */}
       <div>
@@ -2437,6 +2883,114 @@ const AdminLeakReportsView = ({ leakReports, crews, profiles, onRefresh }) => {
           </Card>
         </div>
       )}
+
+      {/* Export Filter Modal */}
+      {showExportModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-lg">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-bold text-zinc-100">Export Leak Reports</h2>
+                <p className="text-sm text-zinc-500">Select filters for PDF export</p>
+              </div>
+              <button onClick={() => setShowExportModal(false)} className="text-zinc-400 hover:text-zinc-200"><Icons.X /></button>
+            </div>
+
+            <div className="space-y-6">
+              {/* Date Range */}
+              <div>
+                <p className="text-sm text-zinc-400 font-medium mb-2">Date Range</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <Input
+                    label="Start Date"
+                    type="date"
+                    value={exportFilters.startDate}
+                    onChange={(e) => setExportFilters(prev => ({ ...prev, startDate: e.target.value }))}
+                  />
+                  <Input
+                    label="End Date"
+                    type="date"
+                    value={exportFilters.endDate}
+                    onChange={(e) => setExportFilters(prev => ({ ...prev, endDate: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              {/* Supervisors */}
+              <div>
+                <p className="text-sm text-zinc-400 font-medium mb-2">Supervisors (leave empty for all)</p>
+                <div className="flex flex-wrap gap-2">
+                  {supervisorProfiles.map(sup => (
+                    <button
+                      key={sup.id}
+                      onClick={() => toggleSupervisorFilter(sup.id)}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                        exportFilters.supervisors.includes(sup.id)
+                          ? 'bg-amber-500 text-zinc-900'
+                          : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                      }`}
+                    >
+                      {sup.name}
+                    </button>
+                  ))}
+                </div>
+                {supervisorProfiles.length === 0 && <p className="text-zinc-500 text-sm">No supervisors with reports</p>}
+              </div>
+
+              {/* Classification */}
+              <div>
+                <p className="text-sm text-zinc-400 font-medium mb-2">Classification</p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { value: 'all', label: 'All' },
+                    { value: 'all_hourly', label: 'Hourly' },
+                    { value: 'unit_rates', label: 'Unit' },
+                    { value: 'both', label: 'Both' }
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setExportFilters(prev => ({ ...prev, classification: opt.value }))}
+                      className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                        exportFilters.classification === opt.value
+                          ? opt.value === 'all_hourly' ? 'bg-sky-500 text-white'
+                          : opt.value === 'unit_rates' ? 'bg-purple-500 text-white'
+                          : opt.value === 'both' ? 'bg-amber-500 text-zinc-900'
+                          : 'bg-amber-500 text-zinc-900'
+                          : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Preview count */}
+              <div className="bg-zinc-800/50 rounded-lg p-3">
+                <p className="text-sm text-zinc-400">
+                  Reports matching filters: <span className="text-zinc-100 font-medium">
+                    {(() => {
+                      let filtered = [...leakReports]
+                      if (exportFilters.startDate) filtered = filtered.filter(r => r.date >= exportFilters.startDate)
+                      if (exportFilters.endDate) filtered = filtered.filter(r => r.date <= exportFilters.endDate)
+                      if (exportFilters.supervisors.length > 0) filtered = filtered.filter(r => exportFilters.supervisors.includes(getReportSupervisor(r)))
+                      if (exportFilters.classification !== 'all') filtered = filtered.filter(r => r.rate_type === exportFilters.classification)
+                      return filtered.length
+                    })()}
+                  </span>
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6 pt-4 border-t border-zinc-800">
+              <Button variant="secondary" onClick={() => setShowExportModal(false)} className="flex-1">Cancel</Button>
+              <Button variant="primary" onClick={handleExportWithFilters} loading={exportLoading} className="flex-1">
+                <span className="flex items-center gap-2"><Icons.Download /> Export as ZIP</span>
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }
@@ -2510,7 +3064,7 @@ export default function App() {
       case 'employees': return <EmployeesView employees={employees} crews={crews} onRefresh={fetchAllData} readOnly={profile?.role !== 'admin'} />
       case 'crews': case 'my-crew': return <CrewsView crews={crews} employees={employees} profiles={profiles} profile={profile} onRefresh={fetchAllData} equipment={equipment} leakReports={leakReports} />
       case 'equipment': case 'my-equipment': return <EquipmentView equipment={equipment} crews={crews} profile={profile} onRefresh={fetchAllData} />
-      case 'leak-reports': return <AdminLeakReportsView leakReports={leakReports} crews={crews} profiles={profiles} onRefresh={fetchAllData} />
+      case 'leak-reports': return <AdminLeakReportsView leakReports={leakReports} crews={crews} profiles={profiles} onRefresh={fetchAllData} employees={employees} />
       case 'my-leak-reports': return <ForemanLeakReportsView leakReports={leakReports} crews={crews} profile={profile} onRefresh={fetchAllData} />
       case 'review-reports': return <SupervisorReviewView leakReports={leakReports} crews={crews} profile={profile} onRefresh={fetchAllData} />
       default: return <Dashboard profile={profile} crews={crews} employees={employees} equipment={equipment} leakReports={leakReports} />
