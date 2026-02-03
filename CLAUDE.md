@@ -46,7 +46,8 @@ Core tables with Row Level Security (RLS):
 - **crews** - Teams with foreman_id (employee) and foreman_user_id (profile)
 - **crew_members** - Junction table (crew_id, employee_id)
 - **equipment** - Assets with type, status, photo_url, crew assignment
-- **job_reports** / **job_report_employees** - Leak reports with attendance
+- **leak_reports** / **job_report_employees** - Leak reports with attendance
+- **activity_logs** - Audit trail of all user actions (admin-viewable only)
 
 Helper functions: `get_user_role()`, `get_user_crew_id()` for RLS policies.
 
@@ -109,6 +110,42 @@ Admins, Supervisors, and Foremen can all edit crew compositions with role-approp
 - `getFilteredEmployees(query)` returns employees sorted by match quality score
 - `selectedMembers` array tracks currently selected employee IDs
 - `startEditing(crew)` initializes editing mode and clears search
+
+### Activity Logs (Admin Dashboard)
+The Admin Dashboard displays an Activity feed instead of Recent Leak Reports, showing all user actions across the system.
+
+**Database table:** `activity_logs`
+```sql
+- id (UUID, primary key)
+- created_at (timestamp)
+- user_id (UUID, references auth.users)
+- user_name (text)
+- action (text) - e.g., "added", "updated", "deleted", "reviewed"
+- entity_type (text) - e.g., "employee", "crew", "equipment", "leak_report", "user"
+- entity_id (UUID)
+- entity_name (text)
+- details (JSONB, optional)
+```
+
+**Logged actions:**
+- **Employees**: added, updated, deleted
+- **Crews**: created, deleted, crew members updated
+- **Equipment**: added, updated, deleted
+- **Users**: created, role changed, supervisor/foreman assigned to crew
+- **Leak Reports**: submitted (foreman), reviewed (supervisor), edited (admin)
+
+**UI features:**
+- Search bar filters by user name, action, entity type, or entity name
+- Color-coded actions: emerald (added/created), amber (updated), red (deleted), sky (reviewed)
+- Icons by entity type (Users, Truck, Document)
+- Time ago display (just now, Xm ago, Xh ago, Xd ago, or date)
+- Shows last 100 entries, scrollable
+
+**Implementation:**
+- `activityLogs` state in main App component
+- `logActivity(action, entityType, entityId, entityName, details)` function passed to all views
+- Fetched in `fetchAllData()` with limit of 100, ordered by created_at descending
+- Dashboard component has `activitySearch` state and `filteredActivityLogs` computed value
 
 ### PDF Export Functionality
 Uses **pdf-lib** library to fill a pre-made PDF template with report data.
