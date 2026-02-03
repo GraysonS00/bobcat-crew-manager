@@ -884,8 +884,9 @@ const UsersManagementView = ({ profiles, crews, employees, onRefresh, logActivit
 
 const Dashboard = ({ profile, crews, employees, equipment, leakReports, activityLogs = [] }) => {
   const [activitySearch, setActivitySearch] = useState('')
+  const [foremanActivitySearch, setForemanActivitySearch] = useState('')
 
-  // Filter activity logs by search query
+  // Filter activity logs by search query (for admin)
   const filteredActivityLogs = activityLogs.filter(log => {
     if (!activitySearch.trim()) return true
     const query = activitySearch.toLowerCase()
@@ -900,7 +901,23 @@ const Dashboard = ({ profile, crews, employees, equipment, leakReports, activity
   const isSupervisor = profile?.role === 'supervisor'
   const userCrew = isForeman ? crews.find(c => c.foreman_user_id === profile.id) : null
   const supervisorCrews = isSupervisor ? crews.filter(c => c.supervisor_id === profile.id) : []
-  
+
+  // Get foreman user IDs for supervisor's crews
+  const foremanUserIds = supervisorCrews.map(c => c.foreman_user_id).filter(Boolean)
+
+  // Filter activity logs to show only activity from supervisor's foremen
+  const foremanActivityLogs = activityLogs.filter(log => {
+    if (!foremanUserIds.includes(log.user_id)) return false
+    if (!foremanActivitySearch.trim()) return true
+    const query = foremanActivitySearch.toLowerCase()
+    return (
+      log.user_name?.toLowerCase().includes(query) ||
+      log.action?.toLowerCase().includes(query) ||
+      log.entity_type?.toLowerCase().includes(query) ||
+      log.entity_name?.toLowerCase().includes(query)
+    )
+  })
+
   const filteredEquipment = isForeman && userCrew 
     ? equipment.filter(e => e.crew_id === userCrew.id)
     : equipment
@@ -1003,21 +1020,66 @@ const Dashboard = ({ profile, crews, employees, equipment, leakReports, activity
           </Card>
 
           <Card>
-            <h2 className="text-lg font-semibold text-zinc-100 mb-4">Recent Submissions</h2>
-            <div className="space-y-3">
-              {pendingReports.slice(0, 5).map(report => {
-                const crew = crews.find(c => c.id === report.crew_id)
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-zinc-100">Foreman Activity</h2>
+              <span className="text-xs text-zinc-500">{foremanActivityLogs.length} entries</span>
+            </div>
+            <Input
+              placeholder="Search activity..."
+              value={foremanActivitySearch}
+              onChange={(e) => setForemanActivitySearch(e.target.value)}
+              className="mb-4"
+            />
+            <div className="space-y-2 max-h-80 overflow-y-auto">
+              {foremanActivityLogs.slice(0, 50).map(log => {
+                const getActionColor = (action) => {
+                  if (action?.includes('created') || action?.includes('added') || action?.includes('submitted')) return 'text-emerald-400'
+                  if (action?.includes('deleted') || action?.includes('removed')) return 'text-red-400'
+                  if (action?.includes('updated') || action?.includes('edited') || action?.includes('changed')) return 'text-amber-400'
+                  if (action?.includes('reviewed') || action?.includes('approved')) return 'text-sky-400'
+                  return 'text-zinc-400'
+                }
+                const getEntityIcon = (entityType) => {
+                  switch (entityType) {
+                    case 'crew': return <Icons.Users />
+                    case 'equipment': return <Icons.Truck />
+                    case 'leak_report': return <Icons.Document />
+                    default: return <Icons.Document />
+                  }
+                }
+                const timeAgo = (date) => {
+                  const now = new Date()
+                  const then = new Date(date)
+                  const diff = Math.floor((now - then) / 1000)
+                  if (diff < 60) return 'just now'
+                  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
+                  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
+                  if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`
+                  return then.toLocaleDateString()
+                }
                 return (
-                  <div key={report.id} className="p-3 bg-zinc-800/50 rounded-lg">
-                    <div className="flex items-center justify-between mb-1">
-                      <p className="font-medium text-zinc-200">Leak #{report.leak_number || '-'}</p>
-                      <Badge variant="warning">Pending</Badge>
+                  <div key={log.id} className="p-2 bg-zinc-800/50 rounded-lg">
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 bg-zinc-700/50 rounded-lg flex items-center justify-center text-zinc-400 flex-shrink-0 mt-0.5">
+                        {getEntityIcon(log.entity_type)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-zinc-200">
+                          <span className="font-medium">{log.user_name}</span>
+                          <span className={`${getActionColor(log.action)} mx-1`}>{log.action}</span>
+                          <span className="text-zinc-400">{log.entity_name || log.entity_type}</span>
+                        </p>
+                        <p className="text-xs text-zinc-500 mt-0.5">{timeAgo(log.created_at)}</p>
+                      </div>
                     </div>
-                    <p className="text-sm text-zinc-400">{crew?.name || 'Unknown'} • {report.date}</p>
                   </div>
                 )
               })}
-              {pendingReports.length === 0 && <p className="text-zinc-500 text-center py-4">No pending reports</p>}
+              {foremanActivityLogs.length === 0 && (
+                <p className="text-zinc-500 text-center py-4">
+                  {foremanActivitySearch ? 'No matching activity' : 'No foreman activity recorded yet'}
+                </p>
+              )}
             </div>
           </Card>
         </div>
