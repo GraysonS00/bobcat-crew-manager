@@ -147,6 +147,48 @@ The Admin Dashboard displays an Activity feed instead of Recent Leak Reports, sh
 - Fetched in `fetchAllData()` with limit of 100, ordered by created_at descending
 - Dashboard component has `activitySearch` state and `filteredActivityLogs` computed value
 
+**RLS Policies Required:**
+```sql
+-- Admins can view all activity logs
+CREATE POLICY "Admins can view all activity logs" ON activity_logs
+  FOR SELECT USING (
+    EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin')
+  );
+
+-- Anyone authenticated can insert activity logs
+CREATE POLICY "Authenticated users can insert activity logs" ON activity_logs
+  FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+
+-- Supervisors can view activity from their foremen
+CREATE POLICY "Supervisors can view foreman activity logs" ON activity_logs
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM profiles p
+      WHERE p.id = auth.uid()
+      AND p.role = 'supervisor'
+      AND activity_logs.user_id IN (
+        SELECT c.foreman_user_id
+        FROM crews c
+        WHERE c.supervisor_id = auth.uid()
+        AND c.foreman_user_id IS NOT NULL
+      )
+    )
+  );
+```
+
+### Foreman Activity (Supervisor Dashboard)
+The Supervisor Dashboard displays a "Foreman Activity" feed showing actions taken by foremen assigned to the supervisor's crews.
+
+**How it filters:**
+- Gets `foreman_user_id` from all crews where `supervisor_id === profile.id`
+- Filters `activityLogs` to only show entries where `user_id` matches one of those foreman IDs
+
+**UI features:**
+- Same as admin activity (search bar, color-coded actions, icons, time ago)
+- Shows activity for: crew member changes, equipment updates, leak report submissions/edits
+- `foremanActivitySearch` state for filtering
+- `foremanActivityLogs` computed from `activityLogs` filtered by foreman user IDs
+
 ### PDF Export Functionality
 Uses **pdf-lib** library to fill a pre-made PDF template with report data.
 
