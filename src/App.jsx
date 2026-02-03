@@ -492,7 +492,7 @@ const Navigation = ({ currentView, setCurrentView, profile, onLogout }) => {
 // USER MANAGEMENT VIEW (Admin Only)
 // =============================================
 
-const UsersManagementView = ({ profiles, crews, employees, onRefresh }) => {
+const UsersManagementView = ({ profiles, crews, employees, onRefresh, logActivity }) => {
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
   const [showCrewAssignment, setShowCrewAssignment] = useState(null)
@@ -539,6 +539,9 @@ const UsersManagementView = ({ profiles, crews, employees, onRefresh }) => {
       }
 
       setSuccess(`User ${newUser.name} created successfully!`)
+      if (logActivity) {
+        await logActivity('created', 'user', data.user?.id, newUser.name)
+      }
       setNewUser({ email: '', password: '', name: '', role: 'foreman', phone: '' })
       setTimeout(() => {
         setShowAddModal(false)
@@ -555,12 +558,16 @@ const UsersManagementView = ({ profiles, crews, employees, onRefresh }) => {
 
   const handleUpdateRole = async (userId, newRole) => {
     setLoading(true)
+    const userProfile = profiles.find(p => p.id === userId)
     const { error } = await supabase
       .from('profiles')
       .update({ role: newRole })
       .eq('id', userId)
-    
+
     if (!error) {
+      if (logActivity) {
+        await logActivity(`changed role to ${newRole} for`, 'user', userId, userProfile?.name)
+      }
       onRefresh()
     }
     setLoading(false)
@@ -568,12 +575,17 @@ const UsersManagementView = ({ profiles, crews, employees, onRefresh }) => {
 
   const handleAssignSupervisor = async (crewId, supervisorId) => {
     setLoading(true)
+    const crew = crews.find(c => c.id === crewId)
+    const supervisor = profiles.find(p => p.id === supervisorId)
     const { error } = await supabase
       .from('crews')
       .update({ supervisor_id: supervisorId || null })
       .eq('id', crewId)
-    
+
     if (!error) {
+      if (logActivity) {
+        await logActivity(supervisorId ? `assigned ${supervisor?.name} as supervisor for` : 'removed supervisor from', 'crew', crewId, crew?.name)
+      }
       onRefresh()
       setShowCrewAssignment(null)
     }
@@ -582,15 +594,20 @@ const UsersManagementView = ({ profiles, crews, employees, onRefresh }) => {
 
   const handleAssignForeman = async (crewId, foremanUserId, foremanEmployeeId) => {
     setLoading(true)
+    const crew = crews.find(c => c.id === crewId)
+    const foremanProfile = profiles.find(p => p.id === foremanUserId)
     const { error } = await supabase
       .from('crews')
-      .update({ 
+      .update({
         foreman_user_id: foremanUserId || null,
         foreman_id: foremanEmployeeId || null
       })
       .eq('id', crewId)
-    
+
     if (!error) {
+      if (logActivity) {
+        await logActivity(foremanUserId ? `assigned ${foremanProfile?.name} as foreman for` : 'removed foreman from', 'crew', crewId, crew?.name)
+      }
       onRefresh()
       setShowCrewAssignment(null)
     }
@@ -865,7 +882,20 @@ const UsersManagementView = ({ profiles, crews, employees, onRefresh }) => {
 // DASHBOARD
 // =============================================
 
-const Dashboard = ({ profile, crews, employees, equipment, leakReports }) => {
+const Dashboard = ({ profile, crews, employees, equipment, leakReports, activityLogs = [] }) => {
+  const [activitySearch, setActivitySearch] = useState('')
+
+  // Filter activity logs by search query
+  const filteredActivityLogs = activityLogs.filter(log => {
+    if (!activitySearch.trim()) return true
+    const query = activitySearch.toLowerCase()
+    return (
+      log.user_name?.toLowerCase().includes(query) ||
+      log.action?.toLowerCase().includes(query) ||
+      log.entity_type?.toLowerCase().includes(query) ||
+      log.entity_name?.toLowerCase().includes(query)
+    )
+  })
   const isForeman = profile?.role === 'foreman'
   const isSupervisor = profile?.role === 'supervisor'
   const userCrew = isForeman ? crews.find(c => c.foreman_user_id === profile.id) : null
@@ -1103,30 +1133,68 @@ const Dashboard = ({ profile, crews, employees, equipment, leakReports }) => {
           </Card>
 
           <Card>
-            <h2 className="text-lg font-semibold text-zinc-100 mb-4">Recent Leak Reports</h2>
-            <div className="space-y-3">
-              {leakReports.slice(0, 5).map(report => {
-                const crew = crews.find(c => c.id === report.crew_id)
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-zinc-100">Activity</h2>
+              <span className="text-xs text-zinc-500">{filteredActivityLogs.length} entries</span>
+            </div>
+            <Input
+              placeholder="Search activity..."
+              value={activitySearch}
+              onChange={(e) => setActivitySearch(e.target.value)}
+              className="mb-4"
+            />
+            <div className="space-y-2 max-h-80 overflow-y-auto">
+              {filteredActivityLogs.slice(0, 50).map(log => {
+                const getActionColor = (action) => {
+                  if (action?.includes('created') || action?.includes('added')) return 'text-emerald-400'
+                  if (action?.includes('deleted') || action?.includes('removed')) return 'text-red-400'
+                  if (action?.includes('updated') || action?.includes('edited') || action?.includes('changed')) return 'text-amber-400'
+                  if (action?.includes('reviewed') || action?.includes('approved')) return 'text-sky-400'
+                  return 'text-zinc-400'
+                }
+                const getEntityIcon = (entityType) => {
+                  switch (entityType) {
+                    case 'user': return <Icons.Users />
+                    case 'employee': return <Icons.Users />
+                    case 'crew': return <Icons.Users />
+                    case 'equipment': return <Icons.Truck />
+                    case 'leak_report': return <Icons.Document />
+                    default: return <Icons.Document />
+                  }
+                }
+                const timeAgo = (date) => {
+                  const now = new Date()
+                  const then = new Date(date)
+                  const diff = Math.floor((now - then) / 1000)
+                  if (diff < 60) return 'just now'
+                  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
+                  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
+                  if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`
+                  return then.toLocaleDateString()
+                }
                 return (
-                  <div key={report.id} className="p-3 bg-zinc-800/50 rounded-lg">
-                    <div className="flex items-center justify-between mb-1">
-                      <p className="font-medium text-zinc-200">Leak #{report.leak_number || '-'}</p>
-                      <div className="flex items-center gap-2">
-                        <Badge variant={report.status === 'reviewed' ? 'success' : 'warning'}>
-                          {report.status === 'reviewed' ? 'Reviewed' : 'Pending'}
-                        </Badge>
-                        {report.rate_type && (
-                          <Badge variant={report.rate_type === 'all_hourly' ? 'info' : report.rate_type === 'unit_rates' ? 'purple' : 'default'}>
-                            {report.rate_type === 'all_hourly' ? 'Hourly' : report.rate_type === 'unit_rates' ? 'Unit' : 'Both'}
-                          </Badge>
-                        )}
+                  <div key={log.id} className="p-2 bg-zinc-800/50 rounded-lg">
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 bg-zinc-700/50 rounded-lg flex items-center justify-center text-zinc-400 flex-shrink-0 mt-0.5">
+                        {getEntityIcon(log.entity_type)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-zinc-200">
+                          <span className="font-medium">{log.user_name}</span>
+                          <span className={`${getActionColor(log.action)} mx-1`}>{log.action}</span>
+                          <span className="text-zinc-400">{log.entity_name || log.entity_type}</span>
+                        </p>
+                        <p className="text-xs text-zinc-500 mt-0.5">{timeAgo(log.created_at)}</p>
                       </div>
                     </div>
-                    <p className="text-sm text-zinc-400">{crew?.name || 'Unknown crew'} • {report.date}</p>
                   </div>
                 )
               })}
-              {leakReports.length === 0 && <p className="text-zinc-500 text-center py-4">No reports submitted yet</p>}
+              {filteredActivityLogs.length === 0 && (
+                <p className="text-zinc-500 text-center py-4">
+                  {activitySearch ? 'No matching activity' : 'No activity recorded yet'}
+                </p>
+              )}
             </div>
           </Card>
         </div>
@@ -1139,7 +1207,7 @@ const Dashboard = ({ profile, crews, employees, equipment, leakReports }) => {
 // EMPLOYEES VIEW
 // =============================================
 
-const EmployeesView = ({ employees, crews, onRefresh, readOnly = false }) => {
+const EmployeesView = ({ employees, crews, onRefresh, readOnly = false, logActivity }) => {
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingEmployee, setEditingEmployee] = useState(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
@@ -1164,7 +1232,10 @@ const EmployeesView = ({ employees, crews, onRefresh, readOnly = false }) => {
 
   const handleAdd = async () => {
     setLoading(true)
-    await supabase.from('employees').insert([newEmployee])
+    const { data } = await supabase.from('employees').insert([newEmployee]).select()
+    if (data?.[0] && logActivity) {
+      await logActivity('added', 'employee', data[0].id, newEmployee.name)
+    }
     setNewEmployee({ name: '', classification: 'General Labor', phone: '', employee_number: '', active: true })
     setShowAddModal(false)
     onRefresh()
@@ -1177,6 +1248,9 @@ const EmployeesView = ({ employees, crews, onRefresh, readOnly = false }) => {
       name: editingEmployee.name, classification: editingEmployee.classification,
       phone: editingEmployee.phone, employee_number: editingEmployee.employee_number, active: editingEmployee.active,
     }).eq('id', editingEmployee.id)
+    if (logActivity) {
+      await logActivity('updated', 'employee', editingEmployee.id, editingEmployee.name)
+    }
     setEditingEmployee(null)
     onRefresh()
     setLoading(false)
@@ -1189,6 +1263,9 @@ const EmployeesView = ({ employees, crews, onRefresh, readOnly = false }) => {
       await supabase.from('crews').update({ foreman_id: null }).eq('foreman_id', employee.id)
       const { error } = await supabase.from('employees').delete().eq('id', employee.id)
       if (error) throw error
+      if (logActivity) {
+        await logActivity('deleted', 'employee', employee.id, employee.name)
+      }
       setShowDeleteConfirm(null)
       onRefresh()
     } catch (err) {
@@ -1333,7 +1410,7 @@ const EmployeesView = ({ employees, crews, onRefresh, readOnly = false }) => {
 // CREWS VIEW
 // =============================================
 
-const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, leakReports }) => {
+const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, leakReports, logActivity }) => {
   const [selectedCrew, setSelectedCrew] = useState(null)
   const [isEditing, setIsEditing] = useState(false)
   const [selectedMembers, setSelectedMembers] = useState([])
@@ -1419,6 +1496,9 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, 
     if (selectedMembers.length > 0) {
       await supabase.from('crew_members').insert(selectedMembers.map(empId => ({ crew_id: selectedCrew.id, employee_id: empId })))
     }
+    if (logActivity) {
+      await logActivity('updated crew members for', 'crew', selectedCrew.id, selectedCrew.name)
+    }
     setIsEditing(false)
     setSelectedCrew(null)
     setSearchQuery('')
@@ -1429,7 +1509,10 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, 
   const handleAddCrew = async () => {
     if (!newCrewName.trim()) return
     setLoading(true)
-    await supabase.from('crews').insert([{ name: newCrewName.trim() }])
+    const { data } = await supabase.from('crews').insert([{ name: newCrewName.trim() }]).select()
+    if (data?.[0] && logActivity) {
+      await logActivity('created', 'crew', data[0].id, newCrewName.trim())
+    }
     setNewCrewName('')
     setShowAddCrew(false)
     onRefresh()
@@ -1443,6 +1526,9 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, 
       await supabase.from('equipment').update({ crew_id: null }).eq('crew_id', crew.id)
       const { error } = await supabase.from('crews').delete().eq('id', crew.id)
       if (error) throw error
+      if (logActivity) {
+        await logActivity('deleted', 'crew', crew.id, crew.name)
+      }
       setShowDeleteConfirm(null)
       onRefresh()
     } catch (err) {
@@ -1742,7 +1828,7 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, 
 // EQUIPMENT VIEW
 // =============================================
 
-const EquipmentView = ({ equipment, crews, profile, onRefresh }) => {
+const EquipmentView = ({ equipment, crews, profile, onRefresh, logActivity }) => {
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingEquipment, setEditingEquipment] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -1767,7 +1853,10 @@ const EquipmentView = ({ equipment, crews, profile, onRefresh }) => {
 
   const handleAdd = async () => {
     setLoading(true)
-    await supabase.from('equipment').insert([{ ...newEquipment, crew_id: userCrew?.id }])
+    const { data } = await supabase.from('equipment').insert([{ ...newEquipment, crew_id: userCrew?.id }]).select()
+    if (data?.[0] && logActivity) {
+      await logActivity('added', 'equipment', data[0].id, newEquipment.description || newEquipment.type)
+    }
     setNewEquipment({ type: 'Tool', description: '', equipment_number: '', serial_number: '', photo_url: null, status: 'In Service', notes: '' })
     setShowAddModal(false)
     onRefresh()
@@ -1780,13 +1869,22 @@ const EquipmentView = ({ equipment, crews, profile, onRefresh }) => {
       type: editingEquipment.type, description: editingEquipment.description, equipment_number: editingEquipment.equipment_number,
       serial_number: editingEquipment.serial_number, photo_url: editingEquipment.photo_url, status: editingEquipment.status, notes: editingEquipment.notes,
     }).eq('id', editingEquipment.id)
+    if (logActivity) {
+      await logActivity('updated', 'equipment', editingEquipment.id, editingEquipment.description || editingEquipment.type)
+    }
     setEditingEquipment(null)
     onRefresh()
     setLoading(false)
   }
 
-  const handleDelete = async (id) => {
-    if (confirm('Remove?')) { await supabase.from('equipment').delete().eq('id', id); onRefresh() }
+  const handleDelete = async (item) => {
+    if (confirm('Remove?')) {
+      await supabase.from('equipment').delete().eq('id', item.id)
+      if (logActivity) {
+        await logActivity('deleted', 'equipment', item.id, item.description || item.type)
+      }
+      onRefresh()
+    }
   }
 
   const readOnly = profile?.role === 'supervisor'
@@ -1824,7 +1922,7 @@ const EquipmentView = ({ equipment, crews, profile, onRefresh }) => {
                 {!readOnly && (
                   <div className="flex gap-2 pt-2">
                     <Button variant="secondary" size="sm" onClick={() => setEditingEquipment(item)} className="flex-1"><span className="flex items-center justify-center gap-1"><Icons.Edit /> Edit</span></Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(item.id)}><Icons.Trash /></Button>
+                    <Button variant="ghost" size="sm" onClick={() => handleDelete(item)}><Icons.Trash /></Button>
                   </div>
                 )}
               </div>
@@ -2079,7 +2177,7 @@ const LeakReportForm = ({ formData, updateForm, addDowntimePeriod, updateDowntim
 // FOREMAN LEAK REPORTS VIEW
 // =============================================
 
-const ForemanLeakReportsView = ({ leakReports, crews, profile, onRefresh }) => {
+const ForemanLeakReportsView = ({ leakReports, crews, profile, onRefresh, logActivity }) => {
   const [showAddModal, setShowAddModal] = useState(false)
   const [viewingReport, setViewingReport] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -2131,8 +2229,13 @@ const ForemanLeakReportsView = ({ leakReports, crews, profile, onRefresh }) => {
       crew_end_time: formData.crew_end_time || null, leak_repair_completed: formData.leak_repair_completed,
       fcc_name: formData.fcc_name || null, fcc_signature: formData.fcc_signature || null, notes: formData.notes || null,
     }
-    const { error } = await supabase.from('leak_reports').insert([submitData])
-    if (!error) { setFormData(initialFormState); setShowAddModal(false); onRefresh() }
+    const { data, error } = await supabase.from('leak_reports').insert([submitData]).select()
+    if (!error) {
+      if (logActivity && data?.[0]) {
+        await logActivity('submitted', 'leak_report', data[0].id, `Leak #${formData.leak_number || 'N/A'}`)
+      }
+      setFormData(initialFormState); setShowAddModal(false); onRefresh()
+    }
     else alert('Error: ' + error.message)
     setLoading(false)
   }
@@ -2220,7 +2323,7 @@ const ForemanLeakReportsView = ({ leakReports, crews, profile, onRefresh }) => {
 // SUPERVISOR REVIEW VIEW
 // =============================================
 
-const SupervisorReviewView = ({ leakReports, crews, profile, onRefresh }) => {
+const SupervisorReviewView = ({ leakReports, crews, profile, onRefresh, logActivity }) => {
   const [activeTab, setActiveTab] = useState('pending')
   const [reviewingReport, setReviewingReport] = useState(null)
   const [editMode, setEditMode] = useState(false)
@@ -2265,7 +2368,12 @@ const SupervisorReviewView = ({ leakReports, crews, profile, onRefresh }) => {
       status: 'reviewed', reviewed_by: profile.id, reviewed_at: new Date().toISOString(),
     }
     const { error } = await supabase.from('leak_reports').update(updateData).eq('id', reviewingReport.id)
-    if (!error) { setReviewingReport(null); setFormData(null); onRefresh() }
+    if (!error) {
+      if (logActivity) {
+        await logActivity('reviewed', 'leak_report', reviewingReport.id, `Leak #${reviewingReport.leak_number || 'N/A'}`)
+      }
+      setReviewingReport(null); setFormData(null); onRefresh()
+    }
     else alert('Error: ' + error.message)
     setLoading(false)
   }
@@ -2599,7 +2707,7 @@ const exportReportsAsZip = async (reports, crews, profiles, employees) => {
 // ADMIN LEAK REPORTS VIEW
 // =============================================
 
-const AdminLeakReportsView = ({ leakReports, crews, profiles, onRefresh, employees }) => {
+const AdminLeakReportsView = ({ leakReports, crews, profiles, onRefresh, employees, logActivity }) => {
   const [activeSupervisor, setActiveSupervisor] = useState('all')
   const [activeWeek, setActiveWeek] = useState('all')
   const [viewingReport, setViewingReport] = useState(null)
@@ -2699,7 +2807,12 @@ const AdminLeakReportsView = ({ leakReports, crews, profiles, onRefresh, employe
     delete updateData.id
     delete updateData.created_at
     const { error } = await supabase.from('leak_reports').update(updateData).eq('id', viewingReport.id)
-    if (!error) { closeReport(); onRefresh() }
+    if (!error) {
+      if (logActivity) {
+        await logActivity('edited', 'leak_report', viewingReport.id, `Leak #${viewingReport.leak_number || 'N/A'}`)
+      }
+      closeReport(); onRefresh()
+    }
     else alert('Error: ' + error.message)
     setLoading(false)
   }
@@ -3017,6 +3130,7 @@ export default function App() {
   const [equipment, setEquipment] = useState([])
   const [leakReports, setLeakReports] = useState([])
   const [profiles, setProfiles] = useState([])
+  const [activityLogs, setActivityLogs] = useState([])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -3040,18 +3154,36 @@ export default function App() {
   }
 
   const fetchAllData = async () => {
-    const [empRes, crewRes, equipRes, reportRes, profRes] = await Promise.all([
+    const [empRes, crewRes, equipRes, reportRes, profRes, logsRes] = await Promise.all([
       supabase.from('employees').select('*').order('name'),
       supabase.from('crews').select('*, crew_members(*)').order('name'),
       supabase.from('equipment').select('*').order('created_at', { ascending: false }),
       supabase.from('leak_reports').select('*').order('created_at', { ascending: false }),
       supabase.from('profiles').select('*').order('name'),
+      supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(100),
     ])
     setEmployees(empRes.data || [])
     setCrews(crewRes.data || [])
     setEquipment(equipRes.data || [])
     setLeakReports(reportRes.data || [])
     setProfiles(profRes.data || [])
+    setActivityLogs(logsRes.data || [])
+  }
+
+  const logActivity = async (action, entityType, entityId, entityName, details = null) => {
+    try {
+      await supabase.from('activity_logs').insert([{
+        user_id: profile?.id,
+        user_name: profile?.name || 'Unknown',
+        action,
+        entity_type: entityType,
+        entity_id: entityId,
+        entity_name: entityName,
+        details
+      }])
+    } catch (err) {
+      console.error('Failed to log activity:', err)
+    }
   }
 
   const handleLogout = async () => {
@@ -3066,15 +3198,15 @@ export default function App() {
 
   const renderView = () => {
     switch (currentView) {
-      case 'dashboard': return <Dashboard profile={profile} crews={crews} employees={employees} equipment={equipment} leakReports={leakReports} />
-      case 'users': return <UsersManagementView profiles={profiles} crews={crews} employees={employees} onRefresh={fetchAllData} />
-      case 'employees': return <EmployeesView employees={employees} crews={crews} onRefresh={fetchAllData} readOnly={profile?.role !== 'admin'} />
-      case 'crews': case 'my-crew': return <CrewsView crews={crews} employees={employees} profiles={profiles} profile={profile} onRefresh={fetchAllData} equipment={equipment} leakReports={leakReports} />
-      case 'equipment': case 'my-equipment': return <EquipmentView equipment={equipment} crews={crews} profile={profile} onRefresh={fetchAllData} />
-      case 'leak-reports': return <AdminLeakReportsView leakReports={leakReports} crews={crews} profiles={profiles} onRefresh={fetchAllData} employees={employees} />
-      case 'my-leak-reports': return <ForemanLeakReportsView leakReports={leakReports} crews={crews} profile={profile} onRefresh={fetchAllData} />
-      case 'review-reports': return <SupervisorReviewView leakReports={leakReports} crews={crews} profile={profile} onRefresh={fetchAllData} />
-      default: return <Dashboard profile={profile} crews={crews} employees={employees} equipment={equipment} leakReports={leakReports} />
+      case 'dashboard': return <Dashboard profile={profile} crews={crews} employees={employees} equipment={equipment} leakReports={leakReports} activityLogs={activityLogs} />
+      case 'users': return <UsersManagementView profiles={profiles} crews={crews} employees={employees} onRefresh={fetchAllData} logActivity={logActivity} />
+      case 'employees': return <EmployeesView employees={employees} crews={crews} onRefresh={fetchAllData} readOnly={profile?.role !== 'admin'} logActivity={logActivity} />
+      case 'crews': case 'my-crew': return <CrewsView crews={crews} employees={employees} profiles={profiles} profile={profile} onRefresh={fetchAllData} equipment={equipment} leakReports={leakReports} logActivity={logActivity} />
+      case 'equipment': case 'my-equipment': return <EquipmentView equipment={equipment} crews={crews} profile={profile} onRefresh={fetchAllData} logActivity={logActivity} />
+      case 'leak-reports': return <AdminLeakReportsView leakReports={leakReports} crews={crews} profiles={profiles} onRefresh={fetchAllData} employees={employees} logActivity={logActivity} />
+      case 'my-leak-reports': return <ForemanLeakReportsView leakReports={leakReports} crews={crews} profile={profile} onRefresh={fetchAllData} logActivity={logActivity} />
+      case 'review-reports': return <SupervisorReviewView leakReports={leakReports} crews={crews} profile={profile} onRefresh={fetchAllData} logActivity={logActivity} />
+      default: return <Dashboard profile={profile} crews={crews} employees={employees} equipment={equipment} leakReports={leakReports} activityLogs={activityLogs} />
     }
   }
 
