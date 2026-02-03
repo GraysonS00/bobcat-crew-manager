@@ -1894,11 +1894,21 @@ const EquipmentView = ({ equipment, crews, profile, onRefresh, logActivity }) =>
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingEquipment, setEditingEquipment] = useState(null)
   const [loading, setLoading] = useState(false)
-  const [newEquipment, setNewEquipment] = useState({ type: 'Tool', description: '', equipment_number: '', serial_number: '', photo_url: null, status: 'In Service', notes: '' })
+  const [newEquipment, setNewEquipment] = useState({ type: 'Tool', description: '', equipment_number: '', serial_number: '', photo_url: null, status: 'In Service', notes: '', crew_id: '' })
 
   const isForeman = profile?.role === 'foreman'
+  const isSupervisor = profile?.role === 'supervisor'
+  const isAdmin = profile?.role === 'admin'
   const userCrew = isForeman ? crews.find(c => c.foreman_user_id === profile.id) : null
-  const filteredEquipment = isForeman && userCrew ? equipment.filter(e => e.crew_id === userCrew.id) : equipment
+  const supervisorCrews = isSupervisor ? crews.filter(c => c.supervisor_id === profile.id) : []
+
+  // Filter equipment based on role
+  const filteredEquipment = isForeman && userCrew
+    ? equipment.filter(e => e.crew_id === userCrew.id)
+    : isSupervisor
+    ? equipment.filter(e => supervisorCrews.some(c => c.id === e.crew_id))
+    : equipment
+
   const equipmentTypes = ['Truck', 'Trailer', 'Excavator', 'Tool', 'Other']
 
   const handlePhotoUpload = async (e, isEdit = false) => {
@@ -1915,11 +1925,13 @@ const EquipmentView = ({ equipment, crews, profile, onRefresh, logActivity }) =>
 
   const handleAdd = async () => {
     setLoading(true)
-    const { data } = await supabase.from('equipment').insert([{ ...newEquipment, crew_id: userCrew?.id }]).select()
+    // For foremen, use their crew. For supervisors, use selected crew. For admins, use selected crew or null.
+    const crewId = isForeman ? userCrew?.id : (newEquipment.crew_id || null)
+    const { data } = await supabase.from('equipment').insert([{ ...newEquipment, crew_id: crewId }]).select()
     if (data?.[0] && logActivity) {
       await logActivity('added', 'equipment', data[0].id, newEquipment.description || newEquipment.type)
     }
-    setNewEquipment({ type: 'Tool', description: '', equipment_number: '', serial_number: '', photo_url: null, status: 'In Service', notes: '' })
+    setNewEquipment({ type: 'Tool', description: '', equipment_number: '', serial_number: '', photo_url: null, status: 'In Service', notes: '', crew_id: '' })
     setShowAddModal(false)
     onRefresh()
     setLoading(false)
@@ -1927,10 +1939,15 @@ const EquipmentView = ({ equipment, crews, profile, onRefresh, logActivity }) =>
 
   const handleUpdate = async () => {
     setLoading(true)
-    await supabase.from('equipment').update({
+    const updateData = {
       type: editingEquipment.type, description: editingEquipment.description, equipment_number: editingEquipment.equipment_number,
       serial_number: editingEquipment.serial_number, photo_url: editingEquipment.photo_url, status: editingEquipment.status, notes: editingEquipment.notes,
-    }).eq('id', editingEquipment.id)
+    }
+    // Allow supervisors and admins to change crew assignment
+    if (isSupervisor || isAdmin) {
+      updateData.crew_id = editingEquipment.crew_id || null
+    }
+    await supabase.from('equipment').update(updateData).eq('id', editingEquipment.id)
     if (logActivity) {
       await logActivity('updated', 'equipment', editingEquipment.id, editingEquipment.description || editingEquipment.type)
     }
@@ -1949,16 +1966,20 @@ const EquipmentView = ({ equipment, crews, profile, onRefresh, logActivity }) =>
     }
   }
 
-  const readOnly = profile?.role === 'supervisor'
+  const getTitle = () => {
+    if (isForeman) return 'My Equipment'
+    if (isSupervisor) return "My Crews' Equipment"
+    return 'All Equipment'
+  }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-100">{isForeman ? 'My Equipment' : 'All Equipment'}</h1>
+          <h1 className="text-2xl font-bold text-zinc-100">{getTitle()}</h1>
           <p className="text-zinc-500">{filteredEquipment.length} items</p>
         </div>
-        {!readOnly && <Button onClick={() => setShowAddModal(true)}><span className="flex items-center gap-2"><Icons.Plus /> Add Equipment</span></Button>}
+        <Button onClick={() => setShowAddModal(true)}><span className="flex items-center gap-2"><Icons.Plus /> Add Equipment</span></Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1981,12 +2002,10 @@ const EquipmentView = ({ equipment, crews, profile, onRefresh, logActivity }) =>
                   {!isForeman && crew && <p>Crew: <span className="text-zinc-300">{crew.name}</span></p>}
                 </div>
                 {item.notes && <p className="text-sm text-amber-400 bg-amber-900/20 rounded px-2 py-1">{item.notes}</p>}
-                {!readOnly && (
-                  <div className="flex gap-2 pt-2">
-                    <Button variant="secondary" size="sm" onClick={() => setEditingEquipment(item)} className="flex-1"><span className="flex items-center justify-center gap-1"><Icons.Edit /> Edit</span></Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(item)}><Icons.Trash /></Button>
-                  </div>
-                )}
+                <div className="flex gap-2 pt-2">
+                  <Button variant="secondary" size="sm" onClick={() => setEditingEquipment(item)} className="flex-1"><span className="flex items-center justify-center gap-1"><Icons.Edit /> Edit</span></Button>
+                  <Button variant="ghost" size="sm" onClick={() => handleDelete(item)}><Icons.Trash /></Button>
+                </div>
               </div>
             </Card>
           )
@@ -1997,7 +2016,7 @@ const EquipmentView = ({ equipment, crews, profile, onRefresh, logActivity }) =>
         <Card className="text-center py-12">
           <Icons.Truck />
           <p className="text-zinc-400 mt-4">No equipment tracked</p>
-          {!readOnly && <Button onClick={() => setShowAddModal(true)} className="mt-4">Add Equipment</Button>}
+          <Button onClick={() => setShowAddModal(true)} className="mt-4">Add Equipment</Button>
         </Card>
       )}
 
@@ -2009,6 +2028,17 @@ const EquipmentView = ({ equipment, crews, profile, onRefresh, logActivity }) =>
               <button onClick={() => setShowAddModal(false)} className="text-zinc-400 hover:text-zinc-200"><Icons.X /></button>
             </div>
             <div className="space-y-4">
+              {(isSupervisor || isAdmin) && (
+                <Select
+                  label="Assign to Crew"
+                  value={newEquipment.crew_id}
+                  onChange={(e) => setNewEquipment({ ...newEquipment, crew_id: e.target.value })}
+                  options={[
+                    { value: '', label: 'Select a crew...' },
+                    ...(isSupervisor ? supervisorCrews : crews).map(c => ({ value: c.id, label: c.name }))
+                  ]}
+                />
+              )}
               <Select label="Type" value={newEquipment.type} onChange={(e) => setNewEquipment({ ...newEquipment, type: e.target.value })} options={equipmentTypes.map(t => ({ value: t, label: t }))} />
               <Input label="Description" value={newEquipment.description} onChange={(e) => setNewEquipment({ ...newEquipment, description: e.target.value })} placeholder="e.g., 2022 Ford F-350" />
               <Input label="Equipment Number" value={newEquipment.equipment_number} onChange={(e) => setNewEquipment({ ...newEquipment, equipment_number: e.target.value })} />
@@ -2023,7 +2053,7 @@ const EquipmentView = ({ equipment, crews, profile, onRefresh, logActivity }) =>
               <Textarea label="Notes" value={newEquipment.notes} onChange={(e) => setNewEquipment({ ...newEquipment, notes: e.target.value })} />
               <div className="flex gap-3 pt-4">
                 <Button variant="secondary" onClick={() => setShowAddModal(false)} className="flex-1">Cancel</Button>
-                <Button onClick={handleAdd} loading={loading} className="flex-1" disabled={!newEquipment.description || !newEquipment.equipment_number}>Add</Button>
+                <Button onClick={handleAdd} loading={loading} className="flex-1" disabled={!newEquipment.description || !newEquipment.equipment_number || (isSupervisor && !newEquipment.crew_id)}>Add</Button>
               </div>
             </div>
           </Card>
@@ -2038,6 +2068,17 @@ const EquipmentView = ({ equipment, crews, profile, onRefresh, logActivity }) =>
               <button onClick={() => setEditingEquipment(null)} className="text-zinc-400 hover:text-zinc-200"><Icons.X /></button>
             </div>
             <div className="space-y-4">
+              {(isSupervisor || isAdmin) && (
+                <Select
+                  label="Assigned Crew"
+                  value={editingEquipment.crew_id || ''}
+                  onChange={(e) => setEditingEquipment({ ...editingEquipment, crew_id: e.target.value })}
+                  options={[
+                    { value: '', label: 'Unassigned' },
+                    ...(isSupervisor ? supervisorCrews : crews).map(c => ({ value: c.id, label: c.name }))
+                  ]}
+                />
+              )}
               <Select label="Type" value={editingEquipment.type} onChange={(e) => setEditingEquipment({ ...editingEquipment, type: e.target.value })} options={equipmentTypes.map(t => ({ value: t, label: t }))} />
               <Input label="Description" value={editingEquipment.description} onChange={(e) => setEditingEquipment({ ...editingEquipment, description: e.target.value })} />
               <Input label="Equipment Number" value={editingEquipment.equipment_number} onChange={(e) => setEditingEquipment({ ...editingEquipment, equipment_number: e.target.value })} />
