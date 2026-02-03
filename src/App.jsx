@@ -1559,7 +1559,7 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, 
                 </div>
                 <div className="flex gap-2">
                   <Button variant="ghost" size="sm" onClick={() => setSelectedCrew(crew)}><span className="flex items-center gap-1"><Icons.Eye /> View</span></Button>
-                  {isSupervisor && (
+                  {(isSupervisor || isAdmin) && (
                     <Button variant="ghost" size="sm" onClick={() => startEditing(crew)}><span className="flex items-center gap-1"><Icons.Edit /> Edit</span></Button>
                   )}
                   {isAdmin && (
@@ -1633,7 +1633,7 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, 
                     <Badge variant={emp.id === selectedCrew.foreman_id ? 'info' : 'default'}>{emp.id === selectedCrew.foreman_id ? 'Foreman' : emp.classification}</Badge>
                   </div>
                 ))}
-                {isSupervisor && (
+                {(isSupervisor || isAdmin) && (
                   <div className="pt-4 border-t border-zinc-800">
                     <Button onClick={() => startEditing(selectedCrew)} className="w-full"><span className="flex items-center justify-center gap-2"><Icons.Edit /> Edit Crew Members</span></Button>
                   </div>
