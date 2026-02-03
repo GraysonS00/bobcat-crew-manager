@@ -1492,12 +1492,32 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, 
                 {searchQuery ? `${filteredEmployees.length} matching employees` : `${availableEmployees.length} employees available`}
                 {selectedMembers.length > 0 && ` • ${selectedMembers.length} selected`}
               </p>
+              {/* Selected employees - always visible at top */}
+              {selectedMembers.length > 0 && (
+                <div className="space-y-2 pb-3 border-b border-zinc-700">
+                  <p className="text-xs font-medium text-amber-400 uppercase tracking-wide">Current Crew Members</p>
+                  <div className="grid gap-2">
+                    {availableEmployees.filter(emp => selectedMembers.includes(emp.id)).map(emp => (
+                      <button key={emp.id} onClick={() => toggleMember(emp.id)}
+                        className="flex items-center gap-4 p-3 rounded-lg border text-left border-amber-500 bg-amber-500/10">
+                        <div className="w-6 h-6 rounded border-2 flex items-center justify-center border-amber-500 bg-amber-500 text-zinc-900">
+                          <Icons.Check />
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-medium text-zinc-200">{emp.name}</p>
+                          <p className="text-sm text-zinc-500">{emp.classification}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* Available employees to add */}
               <div className="grid gap-2 max-h-80 overflow-y-auto">
-                {filteredEmployees.map(emp => (
+                {filteredEmployees.filter(emp => !selectedMembers.includes(emp.id)).map(emp => (
                   <button key={emp.id} onClick={() => toggleMember(emp.id)}
-                    className={`flex items-center gap-4 p-3 rounded-lg border text-left ${selectedMembers.includes(emp.id) ? 'border-amber-500 bg-amber-500/10' : 'border-zinc-700 hover:border-zinc-600 bg-zinc-800/50'}`}>
-                    <div className={`w-6 h-6 rounded border-2 flex items-center justify-center ${selectedMembers.includes(emp.id) ? 'border-amber-500 bg-amber-500 text-zinc-900' : 'border-zinc-600'}`}>
-                      {selectedMembers.includes(emp.id) && <Icons.Check />}
+                    className="flex items-center gap-4 p-3 rounded-lg border text-left border-zinc-700 hover:border-zinc-600 bg-zinc-800/50">
+                    <div className="w-6 h-6 rounded border-2 flex items-center justify-center border-zinc-600">
                     </div>
                     <div className="flex-1">
                       <p className="font-medium text-zinc-200">{emp.name}</p>
@@ -1505,8 +1525,8 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, 
                     </div>
                   </button>
                 ))}
-                {filteredEmployees.length === 0 && searchQuery && (
-                  <p className="text-zinc-500 py-4 text-center">No employees match "{searchQuery}"</p>
+                {filteredEmployees.filter(emp => !selectedMembers.includes(emp.id)).length === 0 && searchQuery && (
+                  <p className="text-zinc-500 py-4 text-center">No additional employees match "{searchQuery}"</p>
                 )}
               </div>
               <div className="flex gap-3 pt-4 border-t border-zinc-800">
@@ -1599,12 +1619,32 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, 
                   {searchQuery ? `${filteredEmployees.length} matching employees` : `${availableEmployees.length} employees available`}
                   {selectedMembers.length > 0 && ` • ${selectedMembers.length} selected`}
                 </p>
+                {/* Selected employees - always visible at top */}
+                {selectedMembers.length > 0 && (
+                  <div className="space-y-2 pb-3 border-b border-zinc-700">
+                    <p className="text-xs font-medium text-amber-400 uppercase tracking-wide">Current Crew Members</p>
+                    <div className="grid gap-2">
+                      {availableEmployees.filter(emp => selectedMembers.includes(emp.id)).map(emp => (
+                        <button key={emp.id} onClick={() => toggleMember(emp.id)}
+                          className="flex items-center gap-4 p-3 rounded-lg border text-left border-amber-500 bg-amber-500/10">
+                          <div className="w-6 h-6 rounded border-2 flex items-center justify-center border-amber-500 bg-amber-500 text-zinc-900">
+                            <Icons.Check />
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-medium text-zinc-200">{emp.name}</p>
+                            <p className="text-sm text-zinc-500">{emp.classification}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {/* Available employees to add */}
                 <div className="grid gap-2 max-h-80 overflow-y-auto">
-                  {filteredEmployees.map(emp => (
+                  {filteredEmployees.filter(emp => !selectedMembers.includes(emp.id)).map(emp => (
                     <button key={emp.id} onClick={() => toggleMember(emp.id)}
-                      className={`flex items-center gap-4 p-3 rounded-lg border text-left ${selectedMembers.includes(emp.id) ? 'border-amber-500 bg-amber-500/10' : 'border-zinc-700 hover:border-zinc-600 bg-zinc-800/50'}`}>
-                      <div className={`w-6 h-6 rounded border-2 flex items-center justify-center ${selectedMembers.includes(emp.id) ? 'border-amber-500 bg-amber-500 text-zinc-900' : 'border-zinc-600'}`}>
-                        {selectedMembers.includes(emp.id) && <Icons.Check />}
+                      className="flex items-center gap-4 p-3 rounded-lg border text-left border-zinc-700 hover:border-zinc-600 bg-zinc-800/50">
+                      <div className="w-6 h-6 rounded border-2 flex items-center justify-center border-zinc-600">
                       </div>
                       <div className="flex-1">
                         <p className="font-medium text-zinc-200">{emp.name}</p>
@@ -1612,8 +1652,8 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, 
                       </div>
                     </button>
                   ))}
-                  {filteredEmployees.length === 0 && searchQuery && (
-                    <p className="text-zinc-500 py-4 text-center">No employees match "{searchQuery}"</p>
+                  {filteredEmployees.filter(emp => !selectedMembers.includes(emp.id)).length === 0 && searchQuery && (
+                    <p className="text-zinc-500 py-4 text-center">No additional employees match "{searchQuery}"</p>
                   )}
                 </div>
                 <div className="flex gap-3 pt-4 border-t border-zinc-800">
