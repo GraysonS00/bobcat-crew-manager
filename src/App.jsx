@@ -1341,6 +1341,7 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, 
   const [showAddCrew, setShowAddCrew] = useState(false)
   const [newCrewName, setNewCrewName] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
+  const [searchQuery, setSearchQuery] = useState('')
 
   const isForeman = profile?.role === 'foreman'
   const isSupervisor = profile?.role === 'supervisor'
@@ -1350,6 +1351,45 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, 
 
   const displayCrews = isForeman ? (userCrew ? [userCrew] : []) : isSupervisor ? supervisorCrews : crews
   const availableEmployees = employees.filter(e => e.active && e.classification !== 'Foreman')
+
+  // Fuzzy search function - returns employees sorted by match quality
+  const getFilteredEmployees = (query) => {
+    if (!query.trim()) return availableEmployees
+    const lowerQuery = query.toLowerCase()
+    return availableEmployees
+      .map(emp => {
+        const name = emp.name.toLowerCase()
+        const classification = emp.classification?.toLowerCase() || ''
+        let score = 0
+        // Exact match at start of name
+        if (name.startsWith(lowerQuery)) score += 100
+        // Exact match at start of any word in name
+        else if (name.split(' ').some(word => word.startsWith(lowerQuery))) score += 80
+        // Contains the query
+        else if (name.includes(lowerQuery)) score += 60
+        // Classification match
+        if (classification.includes(lowerQuery)) score += 40
+        // Partial character matching for typos
+        if (score === 0) {
+          const queryChars = lowerQuery.split('')
+          let matchCount = 0
+          let lastIndex = -1
+          for (const char of queryChars) {
+            const idx = name.indexOf(char, lastIndex + 1)
+            if (idx > lastIndex) {
+              matchCount++
+              lastIndex = idx
+            }
+          }
+          score = (matchCount / queryChars.length) * 30
+        }
+        return { ...emp, score }
+      })
+      .filter(emp => emp.score > 0)
+      .sort((a, b) => b.score - a.score)
+  }
+
+  const filteredEmployees = getFilteredEmployees(searchQuery)
 
   const getCrewWarnings = (crew) => {
     const warnings = []
@@ -1367,6 +1407,7 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, 
   const startEditing = (crew) => {
     setSelectedCrew(crew)
     setSelectedMembers(crew.crew_members?.map(m => m.employee_id) || [])
+    setSearchQuery('')
     setIsEditing(true)
   }
 
@@ -1380,6 +1421,7 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, 
     }
     setIsEditing(false)
     setSelectedCrew(null)
+    setSearchQuery('')
     onRefresh()
     setLoading(false)
   }
@@ -1441,9 +1483,17 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, 
           <h2 className="text-lg font-semibold text-zinc-100 mb-4">Crew Members {isEditing && <span className="text-amber-400">- Editing</span>}</h2>
           {isEditing ? (
             <div className="space-y-4">
-              <p className="text-sm text-zinc-400">Select employees:</p>
+              <Input
+                placeholder="Search employees by name or classification..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <p className="text-sm text-zinc-400">
+                {searchQuery ? `${filteredEmployees.length} matching employees` : `${availableEmployees.length} employees available`}
+                {selectedMembers.length > 0 && ` • ${selectedMembers.length} selected`}
+              </p>
               <div className="grid gap-2 max-h-80 overflow-y-auto">
-                {availableEmployees.map(emp => (
+                {filteredEmployees.map(emp => (
                   <button key={emp.id} onClick={() => toggleMember(emp.id)}
                     className={`flex items-center gap-4 p-3 rounded-lg border text-left ${selectedMembers.includes(emp.id) ? 'border-amber-500 bg-amber-500/10' : 'border-zinc-700 hover:border-zinc-600 bg-zinc-800/50'}`}>
                     <div className={`w-6 h-6 rounded border-2 flex items-center justify-center ${selectedMembers.includes(emp.id) ? 'border-amber-500 bg-amber-500 text-zinc-900' : 'border-zinc-600'}`}>
@@ -1455,9 +1505,12 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, 
                     </div>
                   </button>
                 ))}
+                {filteredEmployees.length === 0 && searchQuery && (
+                  <p className="text-zinc-500 py-4 text-center">No employees match "{searchQuery}"</p>
+                )}
               </div>
               <div className="flex gap-3 pt-4 border-t border-zinc-800">
-                <Button variant="secondary" onClick={() => setIsEditing(false)} className="flex-1">Cancel</Button>
+                <Button variant="secondary" onClick={() => { setIsEditing(false); setSearchQuery(''); }} className="flex-1">Cancel</Button>
                 <Button onClick={handleSave} loading={loading} className="flex-1">Save Crew</Button>
               </div>
             </div>
@@ -1506,6 +1559,9 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, 
                 </div>
                 <div className="flex gap-2">
                   <Button variant="ghost" size="sm" onClick={() => setSelectedCrew(crew)}><span className="flex items-center gap-1"><Icons.Eye /> View</span></Button>
+                  {isSupervisor && (
+                    <Button variant="ghost" size="sm" onClick={() => startEditing(crew)}><span className="flex items-center gap-1"><Icons.Edit /> Edit</span></Button>
+                  )}
                   {isAdmin && (
                     <button onClick={() => setShowDeleteConfirm(crew)} className="p-2 text-zinc-400 hover:text-red-400 hover:bg-zinc-700 rounded-lg">
                       <Icons.Trash />
@@ -1530,13 +1586,21 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, 
           <Card className="w-full max-w-2xl max-h-[80vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-zinc-100">{selectedCrew.name} {isEditing && <span className="text-amber-400">- Editing</span>}</h2>
-              <button onClick={() => { setSelectedCrew(null); setIsEditing(false); }} className="text-zinc-400 hover:text-zinc-200"><Icons.X /></button>
+              <button onClick={() => { setSelectedCrew(null); setIsEditing(false); setSearchQuery(''); }} className="text-zinc-400 hover:text-zinc-200"><Icons.X /></button>
             </div>
             {isEditing ? (
               <div className="space-y-4">
-                <p className="text-sm text-zinc-400">Select employees for this crew:</p>
+                <Input
+                  placeholder="Search employees by name or classification..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                <p className="text-sm text-zinc-400">
+                  {searchQuery ? `${filteredEmployees.length} matching employees` : `${availableEmployees.length} employees available`}
+                  {selectedMembers.length > 0 && ` • ${selectedMembers.length} selected`}
+                </p>
                 <div className="grid gap-2 max-h-80 overflow-y-auto">
-                  {availableEmployees.map(emp => (
+                  {filteredEmployees.map(emp => (
                     <button key={emp.id} onClick={() => toggleMember(emp.id)}
                       className={`flex items-center gap-4 p-3 rounded-lg border text-left ${selectedMembers.includes(emp.id) ? 'border-amber-500 bg-amber-500/10' : 'border-zinc-700 hover:border-zinc-600 bg-zinc-800/50'}`}>
                       <div className={`w-6 h-6 rounded border-2 flex items-center justify-center ${selectedMembers.includes(emp.id) ? 'border-amber-500 bg-amber-500 text-zinc-900' : 'border-zinc-600'}`}>
@@ -1548,9 +1612,12 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, 
                       </div>
                     </button>
                   ))}
+                  {filteredEmployees.length === 0 && searchQuery && (
+                    <p className="text-zinc-500 py-4 text-center">No employees match "{searchQuery}"</p>
+                  )}
                 </div>
                 <div className="flex gap-3 pt-4 border-t border-zinc-800">
-                  <Button variant="secondary" onClick={() => setIsEditing(false)} className="flex-1">Cancel</Button>
+                  <Button variant="secondary" onClick={() => { setIsEditing(false); setSearchQuery(''); }} className="flex-1">Cancel</Button>
                   <Button onClick={handleSave} loading={loading} className="flex-1">Save Crew</Button>
                 </div>
               </div>
