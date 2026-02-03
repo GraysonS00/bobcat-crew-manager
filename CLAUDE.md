@@ -88,6 +88,28 @@ Required for deployment (set in Vercel):
 - Supervisors can edit reports that have already been reviewed (not just pending ones)
 - Edit button visible regardless of report status
 
+### Crew Member Management
+Admins, Supervisors, and Foremen can all edit crew compositions with role-appropriate access:
+
+**Access levels:**
+- **Foremen** - Can edit their own crew only (dedicated view with Edit Crew button)
+- **Supervisors** - Can edit any crew they supervise (Edit button on crew cards + in view modal)
+- **Admins** - Can edit any crew (same UI as supervisors)
+
+**Editing UI features:**
+- **Search bar** with fuzzy matching - searches by employee name and classification
+- **Fuzzy search** prioritizes: exact start match > word start match > contains > classification match > partial character match
+- **Pinned selected employees** - "Current Crew Members" section always visible at top showing who's already on the crew
+- **Scrollable available list** - unselected employees appear below in a scrollable area
+- Click any employee to toggle selection (add/remove from crew)
+
+**Implementation notes:**
+- `CrewsView` component handles all crew management
+- `searchQuery` state controls the search input
+- `getFilteredEmployees(query)` returns employees sorted by match quality score
+- `selectedMembers` array tracks currently selected employee IDs
+- `startEditing(crew)` initializes editing mode and clears search
+
 ### PDF Export Functionality
 Uses **pdf-lib** library to fill a pre-made PDF template with report data.
 
