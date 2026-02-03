@@ -1525,25 +1525,54 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, 
 
       {displayCrews.length === 0 && <Card className="text-center py-12"><p className="text-zinc-400">{isSupervisor ? 'No crews assigned to you' : 'No crews created yet'}</p></Card>}
 
-      {selectedCrew && !isEditing && (
+      {selectedCrew && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <Card className="w-full max-w-2xl max-h-[80vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-zinc-100">{selectedCrew.name}</h2>
-              <button onClick={() => setSelectedCrew(null)} className="text-zinc-400 hover:text-zinc-200"><Icons.X /></button>
+              <h2 className="text-xl font-bold text-zinc-100">{selectedCrew.name} {isEditing && <span className="text-amber-400">- Editing</span>}</h2>
+              <button onClick={() => { setSelectedCrew(null); setIsEditing(false); }} className="text-zinc-400 hover:text-zinc-200"><Icons.X /></button>
             </div>
-            <div className="space-y-4">
-              {employees.filter(e => selectedCrew.crew_members?.some(m => m.employee_id === e.id) || e.id === selectedCrew.foreman_id).map(emp => (
-                <div key={emp.id} className="flex items-center gap-4 p-3 bg-zinc-800/50 rounded-lg">
-                  <div className="w-10 h-10 bg-zinc-700 rounded-full flex items-center justify-center text-zinc-300 font-medium">{emp.name.split(' ').map(n => n[0]).join('')}</div>
-                  <div className="flex-1">
-                    <p className="font-medium text-zinc-200">{emp.name}</p>
-                    <p className="text-sm text-zinc-500">{emp.phone || '-'}</p>
-                  </div>
-                  <Badge variant={emp.id === selectedCrew.foreman_id ? 'info' : 'default'}>{emp.id === selectedCrew.foreman_id ? 'Foreman' : emp.classification}</Badge>
+            {isEditing ? (
+              <div className="space-y-4">
+                <p className="text-sm text-zinc-400">Select employees for this crew:</p>
+                <div className="grid gap-2 max-h-80 overflow-y-auto">
+                  {availableEmployees.map(emp => (
+                    <button key={emp.id} onClick={() => toggleMember(emp.id)}
+                      className={`flex items-center gap-4 p-3 rounded-lg border text-left ${selectedMembers.includes(emp.id) ? 'border-amber-500 bg-amber-500/10' : 'border-zinc-700 hover:border-zinc-600 bg-zinc-800/50'}`}>
+                      <div className={`w-6 h-6 rounded border-2 flex items-center justify-center ${selectedMembers.includes(emp.id) ? 'border-amber-500 bg-amber-500 text-zinc-900' : 'border-zinc-600'}`}>
+                        {selectedMembers.includes(emp.id) && <Icons.Check />}
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium text-zinc-200">{emp.name}</p>
+                        <p className="text-sm text-zinc-500">{emp.classification}</p>
+                      </div>
+                    </button>
+                  ))}
                 </div>
-              ))}
-            </div>
+                <div className="flex gap-3 pt-4 border-t border-zinc-800">
+                  <Button variant="secondary" onClick={() => setIsEditing(false)} className="flex-1">Cancel</Button>
+                  <Button onClick={handleSave} loading={loading} className="flex-1">Save Crew</Button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {employees.filter(e => selectedCrew.crew_members?.some(m => m.employee_id === e.id) || e.id === selectedCrew.foreman_id).map(emp => (
+                  <div key={emp.id} className="flex items-center gap-4 p-3 bg-zinc-800/50 rounded-lg">
+                    <div className="w-10 h-10 bg-zinc-700 rounded-full flex items-center justify-center text-zinc-300 font-medium">{emp.name.split(' ').map(n => n[0]).join('')}</div>
+                    <div className="flex-1">
+                      <p className="font-medium text-zinc-200">{emp.name}</p>
+                      <p className="text-sm text-zinc-500">{emp.phone || '-'}</p>
+                    </div>
+                    <Badge variant={emp.id === selectedCrew.foreman_id ? 'info' : 'default'}>{emp.id === selectedCrew.foreman_id ? 'Foreman' : emp.classification}</Badge>
+                  </div>
+                ))}
+                {isSupervisor && (
+                  <div className="pt-4 border-t border-zinc-800">
+                    <Button onClick={() => startEditing(selectedCrew)} className="w-full"><span className="flex items-center justify-center gap-2"><Icons.Edit /> Edit Crew Members</span></Button>
+                  </div>
+                )}
+              </div>
+            )}
           </Card>
         </div>
       )}
