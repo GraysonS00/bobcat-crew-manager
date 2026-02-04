@@ -317,6 +317,11 @@ const Icons = {
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
     </svg>
   ),
+  ChevronLeft: () => (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+    </svg>
+  ),
 }
 
 // =============================================
@@ -1896,7 +1901,7 @@ const EquipmentView = ({ equipment, crews, employees, profile, onRefresh, logAct
   const [editingEquipment, setEditingEquipment] = useState(null)
   const [loading, setLoading] = useState(false)
   const [newEquipment, setNewEquipment] = useState({ type: 'Tool', description: '', equipment_number: '', serial_number: '', photo_url: null, status: 'In Service', notes: '', crew_id: '' })
-  const [activeCrewTab, setActiveCrewTab] = useState('my-equipment')
+  const [selectedCrewId, setSelectedCrewId] = useState(null) // null = show grid, crew id = show that crew's equipment
 
   const isForeman = profile?.role === 'foreman'
   const isSupervisor = profile?.role === 'supervisor'
@@ -1915,13 +1920,15 @@ const EquipmentView = ({ equipment, crews, employees, profile, onRefresh, logAct
     ? equipment.filter(e => !e.crew_id || !supervisorCrews.some(c => c.id === e.crew_id))
     : []
 
-  // Filter equipment based on role and active tab
+  // Filter equipment based on role and selected crew
   const filteredEquipment = isForeman && userCrew
     ? equipment.filter(e => e.crew_id === userCrew.id)
-    : isSupervisor
-    ? activeCrewTab === 'my-equipment'
+    : isSupervisor && selectedCrewId
+    ? selectedCrewId === 'my-equipment'
       ? supervisorOwnEquipment
-      : equipment.filter(e => e.crew_id === activeCrewTab)
+      : equipment.filter(e => e.crew_id === selectedCrewId)
+    : isSupervisor
+    ? [] // Don't show equipment list on grid view
     : equipment
 
   const equipmentTypes = ['Truck', 'Trailer', 'Excavator', 'Tool', 'Other']
@@ -1938,10 +1945,10 @@ const EquipmentView = ({ equipment, crews, employees, profile, onRefresh, logAct
     }
   }
 
-  // When opening add modal, default to current tab's crew for supervisors
+  // When opening add modal, default to current selected crew for supervisors
   const openAddModal = () => {
-    if (isSupervisor && activeCrewTab !== 'my-equipment') {
-      setNewEquipment({ ...newEquipment, crew_id: activeCrewTab })
+    if (isSupervisor && selectedCrewId && selectedCrewId !== 'my-equipment') {
+      setNewEquipment({ ...newEquipment, crew_id: selectedCrewId })
     }
     setShowAddModal(true)
   }
@@ -1995,42 +2002,75 @@ const EquipmentView = ({ equipment, crews, employees, profile, onRefresh, logAct
     return 'All Equipment'
   }
 
+  // Get selected crew name for title
+  const getSelectedCrewTitle = () => {
+    if (selectedCrewId === 'my-equipment') return 'My Equipment'
+    const crew = supervisorCrews.find(c => c.id === selectedCrewId)
+    return crew ? `${getForemanName(crew)}'s Crew Equipment` : ''
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-zinc-100">{getTitle()}</h1>
-          <p className="text-zinc-500">{filteredEquipment.length} items</p>
-        </div>
-        <Button onClick={openAddModal}><span className="flex items-center gap-2"><Icons.Plus /> Add Equipment</span></Button>
-      </div>
-
-      {isSupervisor && (
-        <div className="flex gap-2 flex-wrap">
-          <TabButton
-            active={activeCrewTab === 'my-equipment'}
-            onClick={() => setActiveCrewTab('my-equipment')}
-            count={supervisorOwnEquipment.length}
-          >
-            My Equipment
-          </TabButton>
-          {supervisorCrews.map(crew => {
-            const crewEquipmentCount = equipment.filter(e => e.crew_id === crew.id).length
-            return (
-              <TabButton
-                key={crew.id}
-                active={activeCrewTab === crew.id}
-                onClick={() => setActiveCrewTab(crew.id)}
-                count={crewEquipmentCount}
-              >
-                {getForemanName(crew)}
-              </TabButton>
-            )
-          })}
-        </div>
+      {/* Supervisor Grid View - when no crew is selected */}
+      {isSupervisor && !selectedCrewId && (
+        <>
+          <div>
+            <h1 className="text-2xl font-bold text-zinc-100">Equipment</h1>
+            <p className="text-zinc-500">Select a crew to view their equipment</p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            {/* My Equipment square */}
+            <button
+              onClick={() => setSelectedCrewId('my-equipment')}
+              className="aspect-square bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 flex flex-col items-center justify-center hover:border-amber-500 hover:bg-zinc-800/80 transition-colors"
+            >
+              <div className="text-4xl text-amber-500 mb-2"><Icons.Truck /></div>
+              <h3 className="text-zinc-100 font-semibold text-center">My Equipment</h3>
+              <p className="text-zinc-500 text-sm">{supervisorOwnEquipment.length} items</p>
+            </button>
+            {/* Foreman crew squares */}
+            {supervisorCrews.map(crew => {
+              const crewEquipmentCount = equipment.filter(e => e.crew_id === crew.id).length
+              return (
+                <button
+                  key={crew.id}
+                  onClick={() => setSelectedCrewId(crew.id)}
+                  className="aspect-square bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 flex flex-col items-center justify-center hover:border-amber-500 hover:bg-zinc-800/80 transition-colors"
+                >
+                  <div className="text-4xl text-amber-500 mb-2"><Icons.Users /></div>
+                  <h3 className="text-zinc-100 font-semibold text-center">{getForemanName(crew)}'s Crew</h3>
+                  <p className="text-zinc-500 text-sm">{crewEquipmentCount} items</p>
+                </button>
+              )
+            })}
+          </div>
+        </>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* Equipment List View - when a crew is selected (supervisors) or for foremen/admins */}
+      {(!isSupervisor || selectedCrewId) && (
+        <>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {isSupervisor && selectedCrewId && (
+                <button
+                  onClick={() => setSelectedCrewId(null)}
+                  className="text-zinc-400 hover:text-zinc-100 transition-colors"
+                >
+                  <Icons.ChevronLeft />
+                </button>
+              )}
+              <div>
+                <h1 className="text-2xl font-bold text-zinc-100">
+                  {isSupervisor ? getSelectedCrewTitle() : getTitle()}
+                </h1>
+                <p className="text-zinc-500">{filteredEquipment.length} items</p>
+              </div>
+            </div>
+            <Button onClick={openAddModal}><span className="flex items-center gap-2"><Icons.Plus /> Add Equipment</span></Button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredEquipment.map(item => {
           const crew = crews.find(c => c.id === item.crew_id)
           return (
@@ -2058,14 +2098,16 @@ const EquipmentView = ({ equipment, crews, employees, profile, onRefresh, logAct
             </Card>
           )
         })}
-      </div>
 
-      {filteredEquipment.length === 0 && (
-        <Card className="text-center py-12">
-          <Icons.Truck />
-          <p className="text-zinc-400 mt-4">No equipment {isSupervisor && activeCrewTab === 'my-equipment' ? 'assigned to you' : 'tracked'}</p>
-          <Button onClick={openAddModal} className="mt-4">Add Equipment</Button>
-        </Card>
+          {filteredEquipment.length === 0 && (
+            <Card className="text-center py-12 col-span-full">
+              <Icons.Truck />
+              <p className="text-zinc-400 mt-4">No equipment {isSupervisor && selectedCrewId === 'my-equipment' ? 'assigned to you' : 'tracked'}</p>
+              <Button onClick={openAddModal} className="mt-4">Add Equipment</Button>
+            </Card>
+          )}
+          </div>
+        </>
       )}
 
       {showAddModal && (
