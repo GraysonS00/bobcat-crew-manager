@@ -428,6 +428,7 @@ const Navigation = ({ currentView, setCurrentView, profile, onLogout }) => {
     supervisor: [
       { id: 'dashboard', label: 'Dashboard', icon: Icons.Home },
       { id: 'crews', label: 'My Crews', icon: Icons.Users },
+      { id: 'equipment', label: 'Equipment', icon: Icons.Truck },
       { id: 'review-reports', label: 'Review Reports', icon: Icons.Document },
     ],
     foreman: [
