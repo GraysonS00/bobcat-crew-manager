@@ -2187,23 +2187,14 @@ const EquipmentView = ({ equipment, crews, employees, profiles, profile, onRefre
 
   return (
     <div className="space-y-6">
-      {/* Header with search bar for Admin and Supervisor */}
-      {(isAdmin || isSupervisor) && !selectedCrewId && (
+      {/* Header with search bar for Admin (top level) and Supervisor */}
+      {((isAdmin && !selectedSupervisorId && !selectedCrewId) || (isSupervisor && !selectedCrewId)) && (
         <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            {(selectedSupervisorId || (isSupervisor && selectedCrewId)) && (
-              <button onClick={handleBack} className="text-zinc-400 hover:text-zinc-100 transition-colors">
-                <Icons.ChevronLeft />
-              </button>
-            )}
-            <div>
-              <h1 className="text-2xl font-bold text-zinc-100">
-                {isAdmin ? getAdminViewTitle() : 'Equipment'}
-              </h1>
-              <p className="text-zinc-500">
-                {hasSearch ? 'Search results' : isAdmin && !selectedSupervisorId ? 'Select a supervisor to view their crews' : isAdmin && selectedSupervisorId ? 'Select a crew to view their equipment' : 'Select a crew to view their equipment'}
-              </p>
-            </div>
+          <div>
+            <h1 className="text-2xl font-bold text-zinc-100">Equipment</h1>
+            <p className="text-zinc-500">
+              {hasSearch ? 'Search results' : isAdmin ? 'Select a supervisor to view their crews' : 'Select a crew to view their equipment'}
+            </p>
           </div>
           <Input
             placeholder="Search equipment, crews, or foremen..."
