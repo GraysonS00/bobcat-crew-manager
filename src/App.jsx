@@ -1301,6 +1301,20 @@ const EmployeesView = ({ employees, crews, onRefresh, readOnly = false, logActiv
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
   const [loading, setLoading] = useState(false)
   const [newEmployee, setNewEmployee] = useState({ name: '', classification: 'General Labor', phone: '', employee_number: '', active: true })
+  const [searchQuery, setSearchQuery] = useState('')
+
+  // Filter employees based on search query
+  const filteredEmployees = searchQuery.trim()
+    ? employees.filter(emp => {
+        const query = searchQuery.toLowerCase()
+        return (
+          emp.name.toLowerCase().includes(query) ||
+          emp.employee_number?.toLowerCase().includes(query) ||
+          emp.classification?.toLowerCase().includes(query) ||
+          emp.phone?.toLowerCase().includes(query)
+        )
+      })
+    : employees
 
   const getEmployeeWarnings = (employee) => {
     const warnings = []
@@ -1378,8 +1392,23 @@ const EmployeesView = ({ employees, crews, onRefresh, readOnly = false, logActiv
         )}
       </div>
 
+      {/* Search bar */}
+      <Input
+        placeholder="Search by name, employee #, classification, or phone..."
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+      />
+
       <Card>
         <div className="overflow-x-auto">
+          {searchQuery && (
+            <div className="px-4 py-2 border-b border-zinc-800 flex items-center justify-between">
+              <p className="text-sm text-zinc-400">
+                {filteredEmployees.length} result{filteredEmployees.length !== 1 ? 's' : ''} for "{searchQuery}"
+              </p>
+              <button onClick={() => setSearchQuery('')} className="text-sm text-zinc-400 hover:text-zinc-200">Clear</button>
+            </div>
+          )}
           <table className="w-full">
             <thead>
               <tr className="border-b border-zinc-800">
@@ -1392,7 +1421,7 @@ const EmployeesView = ({ employees, crews, onRefresh, readOnly = false, logActiv
               </tr>
             </thead>
             <tbody>
-              {employees.map(emp => (
+              {filteredEmployees.map(emp => (
                 <tr key={emp.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/30">
                   <td className="py-3 px-4 text-zinc-200 font-medium">{emp.name}</td>
                   <td className="py-3 px-4 text-zinc-400">{emp.employee_number || '-'}</td>
@@ -1412,6 +1441,9 @@ const EmployeesView = ({ employees, crews, onRefresh, readOnly = false, logActiv
             </tbody>
           </table>
           {employees.length === 0 && <p className="text-zinc-500 text-center py-8">No employees added yet</p>}
+          {employees.length > 0 && filteredEmployees.length === 0 && searchQuery && (
+            <p className="text-zinc-500 text-center py-8">No employees match "{searchQuery}"</p>
+          )}
         </div>
       </Card>
 
