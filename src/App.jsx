@@ -1507,6 +1507,7 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, 
   const [newCrewName, setNewCrewName] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [adminSearchQuery, setAdminSearchQuery] = useState('')
   const [draggedCrew, setDraggedCrew] = useState(null)
   const [dragOverSupervisor, setDragOverSupervisor] = useState(null)
 
@@ -1527,6 +1528,69 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, 
 
   // Crews without a supervisor
   const unassignedCrews = isAdmin ? crews.filter(c => !c.supervisor_id) : []
+
+  // Admin search - find employees and their crews
+  const adminSearchResults = isAdmin && adminSearchQuery.trim() ? (() => {
+    const query = adminSearchQuery.toLowerCase()
+    const results = []
+
+    // Search through all employees
+    employees.forEach(emp => {
+      const nameMatch = emp.name.toLowerCase().includes(query)
+      const classMatch = emp.classification?.toLowerCase().includes(query)
+
+      if (nameMatch || classMatch) {
+        // Find which crew this employee is on
+        const memberCrew = crews.find(c => c.crew_members?.some(m => m.employee_id === emp.id))
+        const foremanCrew = crews.find(c => c.foreman_id === emp.id)
+        const crew = memberCrew || foremanCrew
+
+        // Get supervisor for this crew
+        const supervisor = crew?.supervisor_id ? profiles?.find(p => p.id === crew.supervisor_id) : null
+
+        results.push({
+          employee: emp,
+          crew,
+          supervisor,
+          isForeman: !!foremanCrew,
+          score: nameMatch ? (emp.name.toLowerCase().startsWith(query) ? 100 : 80) : 40
+        })
+      }
+    })
+
+    // Also search crew names
+    crews.forEach(crew => {
+      if (crew.name.toLowerCase().includes(query)) {
+        const supervisor = crew.supervisor_id ? profiles?.find(p => p.id === crew.supervisor_id) : null
+        const foreman = employees.find(e => e.id === crew.foreman_id)
+        // Add crew result if not already included via employee
+        if (!results.some(r => r.crew?.id === crew.id)) {
+          results.push({
+            crew,
+            supervisor,
+            foreman,
+            isCrewMatch: true,
+            score: crew.name.toLowerCase().startsWith(query) ? 90 : 70
+          })
+        }
+      }
+    })
+
+    // Also search supervisor names
+    allSupervisors.forEach(sup => {
+      if (sup.name.toLowerCase().includes(query)) {
+        const supCrews = crews.filter(c => c.supervisor_id === sup.id)
+        results.push({
+          supervisor: sup,
+          supervisorCrews: supCrews,
+          isSupervisorMatch: true,
+          score: sup.name.toLowerCase().startsWith(query) ? 85 : 65
+        })
+      }
+    })
+
+    return results.sort((a, b) => b.score - a.score)
+  })() : []
 
   const displayCrews = isForeman ? (userCrew ? [userCrew] : []) : isSupervisor ? supervisorCrews : crews
   const availableEmployees = employees.filter(e => e.active && e.classification !== 'Foreman')
@@ -1852,72 +1916,186 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, 
       {/* Admin View - Crews grouped by supervisor with drag-and-drop */}
       {isAdmin && (
         <div className="space-y-6">
-          <p className="text-sm text-zinc-400">Drag crews between supervisors to reassign them</p>
+          {/* Search bar */}
+          <Input
+            placeholder="Search employees, crews, or supervisors..."
+            value={adminSearchQuery}
+            onChange={(e) => setAdminSearchQuery(e.target.value)}
+          />
 
-          {/* Supervisor blocks */}
-          {allSupervisors.map(sup => (
-            <div
-              key={sup.id}
-              className={`bg-zinc-900/50 border rounded-xl p-4 transition-colors ${dragOverSupervisor === sup.id ? 'border-amber-500 bg-amber-500/5' : 'border-zinc-800'}`}
-              onDragOver={(e) => handleDragOver(e, sup.id)}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDrop(e, sup.id)}
-            >
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 bg-sky-500/20 rounded-full flex items-center justify-center text-sky-400">
-                  <Icons.User />
-                </div>
-                <div>
-                  <h2 className="font-semibold text-zinc-100">{sup.name}</h2>
-                  <p className="text-sm text-zinc-500">{crewsBySupervisor[sup.id]?.length || 0} crews assigned</p>
-                </div>
+          {/* Search Results */}
+          {adminSearchQuery.trim() && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-zinc-100">Search Results</h2>
+                <button onClick={() => setAdminSearchQuery('')} className="text-sm text-zinc-400 hover:text-zinc-200">Clear search</button>
               </div>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {(crewsBySupervisor[sup.id] || []).map(crew => renderCrewCard(crew, true))}
-                {(crewsBySupervisor[sup.id] || []).length === 0 && (
-                  <div className="col-span-full py-8 text-center text-zinc-500 border-2 border-dashed border-zinc-700 rounded-lg">
-                    Drop crews here to assign to {sup.name}
+
+              {adminSearchResults.length === 0 ? (
+                <Card className="text-center py-8">
+                  <Icons.Search />
+                  <p className="text-zinc-400 mt-2">No results found for "{adminSearchQuery}"</p>
+                </Card>
+              ) : (
+                <div className="space-y-2">
+                  {adminSearchResults.map((result, idx) => {
+                    // Employee result
+                    if (result.employee) {
+                      const foreman = result.crew ? employees.find(e => e.id === result.crew.foreman_id) : null
+                      return (
+                        <Card key={`emp-${result.employee.id}-${idx}`} className="hover:border-zinc-700">
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 bg-zinc-700 rounded-full flex items-center justify-center text-zinc-300 font-medium">
+                              {result.employee.name.split(' ').map(n => n[0]).join('')}
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-medium text-zinc-100">{result.employee.name}</p>
+                              <p className="text-sm text-zinc-500">{result.employee.classification}</p>
+                            </div>
+                            <div className="text-right">
+                              {result.crew ? (
+                                <>
+                                  <p className="text-sm text-zinc-300">
+                                    {result.isForeman ? <Badge variant="info" className="mr-2">Foreman</Badge> : null}
+                                    {result.crew.name}
+                                  </p>
+                                  {result.supervisor && <p className="text-xs text-zinc-500">Supervisor: {result.supervisor.name}</p>}
+                                  {!result.isForeman && foreman && <p className="text-xs text-zinc-500">Foreman: {foreman.name}</p>}
+                                </>
+                              ) : (
+                                <Badge variant="warning">No crew assigned</Badge>
+                              )}
+                            </div>
+                            {result.crew && (
+                              <Button variant="ghost" size="sm" onClick={() => setSelectedCrew(result.crew)}>
+                                <Icons.Eye />
+                              </Button>
+                            )}
+                          </div>
+                        </Card>
+                      )
+                    }
+
+                    // Crew name match result
+                    if (result.isCrewMatch) {
+                      return (
+                        <Card key={`crew-${result.crew.id}`} className="hover:border-zinc-700">
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 bg-amber-500/20 rounded-full flex items-center justify-center text-amber-400">
+                              <Icons.Users />
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-medium text-zinc-100">{result.crew.name}</p>
+                              <p className="text-sm text-zinc-500">
+                                Foreman: {result.foreman?.name || 'Not assigned'}
+                                {result.supervisor && ` • Supervisor: ${result.supervisor.name}`}
+                              </p>
+                            </div>
+                            <Badge>{result.crew.crew_members?.length || 0} members</Badge>
+                            <Button variant="ghost" size="sm" onClick={() => setSelectedCrew(result.crew)}>
+                              <Icons.Eye />
+                            </Button>
+                          </div>
+                        </Card>
+                      )
+                    }
+
+                    // Supervisor match result
+                    if (result.isSupervisorMatch) {
+                      return (
+                        <Card key={`sup-${result.supervisor.id}`} className="hover:border-zinc-700">
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 bg-sky-500/20 rounded-full flex items-center justify-center text-sky-400">
+                              <Icons.User />
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-medium text-zinc-100">{result.supervisor.name}</p>
+                              <p className="text-sm text-zinc-500">Supervisor</p>
+                            </div>
+                            <Badge variant="info">{result.supervisorCrews.length} crews</Badge>
+                          </div>
+                        </Card>
+                      )
+                    }
+
+                    return null
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Normal view when not searching */}
+          {!adminSearchQuery.trim() && (
+            <>
+              <p className="text-sm text-zinc-400">Drag crews between supervisors to reassign them</p>
+
+              {/* Supervisor blocks */}
+              {allSupervisors.map(sup => (
+                <div
+                  key={sup.id}
+                  className={`bg-zinc-900/50 border rounded-xl p-4 transition-colors ${dragOverSupervisor === sup.id ? 'border-amber-500 bg-amber-500/5' : 'border-zinc-800'}`}
+                  onDragOver={(e) => handleDragOver(e, sup.id)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, sup.id)}
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 bg-sky-500/20 rounded-full flex items-center justify-center text-sky-400">
+                      <Icons.User />
+                    </div>
+                    <div>
+                      <h2 className="font-semibold text-zinc-100">{sup.name}</h2>
+                      <p className="text-sm text-zinc-500">{crewsBySupervisor[sup.id]?.length || 0} crews assigned</p>
+                    </div>
                   </div>
-                )}
-              </div>
-            </div>
-          ))}
-
-          {/* Unassigned crews block */}
-          <div
-            className={`bg-zinc-900/50 border rounded-xl p-4 transition-colors ${dragOverSupervisor === 'unassigned' ? 'border-amber-500 bg-amber-500/5' : 'border-zinc-800'}`}
-            onDragOver={(e) => handleDragOver(e, 'unassigned')}
-            onDragLeave={handleDragLeave}
-            onDrop={(e) => handleDrop(e, null)}
-          >
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-zinc-700 rounded-full flex items-center justify-center text-zinc-400">
-                <Icons.Users />
-              </div>
-              <div>
-                <h2 className="font-semibold text-zinc-100">Unassigned Crews</h2>
-                <p className="text-sm text-zinc-500">{unassignedCrews.length} crews without supervisor</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {unassignedCrews.map(crew => renderCrewCard(crew, true))}
-              {unassignedCrews.length === 0 && !draggedCrew && (
-                <div className="col-span-full py-8 text-center text-zinc-500 border-2 border-dashed border-zinc-700 rounded-lg">
-                  All crews are assigned to supervisors
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {(crewsBySupervisor[sup.id] || []).map(crew => renderCrewCard(crew, true))}
+                    {(crewsBySupervisor[sup.id] || []).length === 0 && (
+                      <div className="col-span-full py-8 text-center text-zinc-500 border-2 border-dashed border-zinc-700 rounded-lg">
+                        Drop crews here to assign to {sup.name}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
-              {unassignedCrews.length === 0 && draggedCrew && (
-                <div className="col-span-full py-8 text-center text-zinc-500 border-2 border-dashed border-zinc-700 rounded-lg">
-                  Drop here to unassign from supervisor
-                </div>
-              )}
-            </div>
-          </div>
+              ))}
 
-          {allSupervisors.length === 0 && unassignedCrews.length === 0 && (
-            <Card className="text-center py-12">
-              <p className="text-zinc-400">No crews created yet</p>
-            </Card>
+              {/* Unassigned crews block */}
+              <div
+                className={`bg-zinc-900/50 border rounded-xl p-4 transition-colors ${dragOverSupervisor === 'unassigned' ? 'border-amber-500 bg-amber-500/5' : 'border-zinc-800'}`}
+                onDragOver={(e) => handleDragOver(e, 'unassigned')}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, null)}
+              >
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 bg-zinc-700 rounded-full flex items-center justify-center text-zinc-400">
+                    <Icons.Users />
+                  </div>
+                  <div>
+                    <h2 className="font-semibold text-zinc-100">Unassigned Crews</h2>
+                    <p className="text-sm text-zinc-500">{unassignedCrews.length} crews without supervisor</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {unassignedCrews.map(crew => renderCrewCard(crew, true))}
+                  {unassignedCrews.length === 0 && !draggedCrew && (
+                    <div className="col-span-full py-8 text-center text-zinc-500 border-2 border-dashed border-zinc-700 rounded-lg">
+                      All crews are assigned to supervisors
+                    </div>
+                  )}
+                  {unassignedCrews.length === 0 && draggedCrew && (
+                    <div className="col-span-full py-8 text-center text-zinc-500 border-2 border-dashed border-zinc-700 rounded-lg">
+                      Drop here to unassign from supervisor
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {allSupervisors.length === 0 && unassignedCrews.length === 0 && (
+                <Card className="text-center py-12">
+                  <p className="text-zinc-400">No crews created yet</p>
+                </Card>
+              )}
+            </>
           )}
         </div>
       )}
