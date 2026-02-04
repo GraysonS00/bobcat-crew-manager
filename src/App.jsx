@@ -322,6 +322,16 @@ const Icons = {
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
     </svg>
   ),
+  Search: () => (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+    </svg>
+  ),
+  User: () => (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+    </svg>
+  ),
 }
 
 // =============================================
@@ -1896,18 +1906,34 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, 
 // EQUIPMENT VIEW
 // =============================================
 
-const EquipmentView = ({ equipment, crews, employees, profile, onRefresh, logActivity }) => {
+const EquipmentView = ({ equipment, crews, employees, profiles, profile, onRefresh, logActivity }) => {
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingEquipment, setEditingEquipment] = useState(null)
   const [loading, setLoading] = useState(false)
   const [newEquipment, setNewEquipment] = useState({ type: 'Tool', description: '', equipment_number: '', serial_number: '', photo_url: null, status: 'In Service', notes: '', crew_id: '' })
-  const [selectedCrewId, setSelectedCrewId] = useState(null) // null = show grid, crew id = show that crew's equipment
+  const [selectedSupervisorId, setSelectedSupervisorId] = useState(null) // For admin: which supervisor's crews to show
+  const [selectedCrewId, setSelectedCrewId] = useState(null) // Which crew's equipment to show
+  const [searchQuery, setSearchQuery] = useState('')
 
   const isForeman = profile?.role === 'foreman'
   const isSupervisor = profile?.role === 'supervisor'
   const isAdmin = profile?.role === 'admin'
   const userCrew = isForeman ? crews.find(c => c.foreman_user_id === profile.id) : null
   const supervisorCrews = isSupervisor ? crews.filter(c => c.supervisor_id === profile.id) : []
+
+  // For admin: get all supervisors
+  const allSupervisors = isAdmin ? (profiles || []).filter(p => p.role === 'supervisor') : []
+
+  // For admin: get crews for selected supervisor
+  const selectedSupervisorCrews = isAdmin && selectedSupervisorId
+    ? crews.filter(c => c.supervisor_id === selectedSupervisorId)
+    : []
+
+  // Get supervisor name
+  const getSupervisorName = (supervisorId) => {
+    const supervisor = (profiles || []).find(p => p.id === supervisorId)
+    return supervisor?.name || 'Unknown'
+  }
 
   // Get foreman name for a crew
   const getForemanName = (crew) => {
@@ -1920,14 +1946,104 @@ const EquipmentView = ({ equipment, crews, employees, profile, onRefresh, logAct
     ? equipment.filter(e => !e.crew_id || !supervisorCrews.some(c => c.id === e.crew_id))
     : []
 
-  // Filter equipment based on role and selected crew
+  // Fuzzy search scoring function
+  const getSearchScore = (item, query) => {
+    const q = query.toLowerCase()
+    const desc = (item.description || '').toLowerCase()
+    const equipNum = (item.equipment_number || '').toLowerCase()
+    const serialNum = (item.serial_number || '').toLowerCase()
+    const type = (item.type || '').toLowerCase()
+    const notes = (item.notes || '').toLowerCase()
+    const crew = crews.find(c => c.id === item.crew_id)
+    const foremanName = crew ? getForemanName(crew).toLowerCase() : ''
+    const crewName = crew ? crew.name.toLowerCase() : ''
+
+    // Exact match scores highest
+    if (equipNum === q || serialNum === q) return 100
+    if (desc === q) return 95
+
+    // Starts with match
+    if (equipNum.startsWith(q) || serialNum.startsWith(q)) return 90
+    if (desc.startsWith(q)) return 85
+    if (foremanName.startsWith(q) || crewName.startsWith(q)) return 80
+
+    // Contains match
+    if (equipNum.includes(q) || serialNum.includes(q)) return 70
+    if (desc.includes(q)) return 65
+    if (foremanName.includes(q) || crewName.includes(q)) return 60
+    if (type.includes(q)) return 55
+    if (notes.includes(q)) return 50
+
+    // Word boundary match
+    const words = q.split(/\s+/)
+    const allText = `${desc} ${equipNum} ${serialNum} ${type} ${foremanName} ${crewName} ${notes}`
+    const matchedWords = words.filter(w => allText.includes(w))
+    if (matchedWords.length === words.length) return 40
+    if (matchedWords.length > 0) return 20 + (matchedWords.length / words.length) * 15
+
+    return 0
+  }
+
+  // Search crew/foreman matching for grid navigation
+  const getCrewSearchScore = (crew, query) => {
+    const q = query.toLowerCase()
+    const foremanName = getForemanName(crew).toLowerCase()
+    const crewName = crew.name.toLowerCase()
+
+    if (foremanName === q || crewName === q) return 100
+    if (foremanName.startsWith(q) || crewName.startsWith(q)) return 80
+    if (foremanName.includes(q) || crewName.includes(q)) return 60
+    return 0
+  }
+
+  // Search supervisor matching for admin grid
+  const getSupervisorSearchScore = (supervisor, query) => {
+    const q = query.toLowerCase()
+    const name = (supervisor.name || '').toLowerCase()
+
+    if (name === q) return 100
+    if (name.startsWith(q)) return 80
+    if (name.includes(q)) return 60
+    return 0
+  }
+
+  // Determine what to show based on search and navigation state
+  const hasSearch = searchQuery.trim().length > 0
+
+  // Search results for equipment
+  const searchEquipmentResults = hasSearch
+    ? equipment
+        .map(item => ({ ...item, score: getSearchScore(item, searchQuery) }))
+        .filter(item => item.score > 0)
+        .sort((a, b) => b.score - a.score)
+    : []
+
+  // Search results for crews (for supervisor or admin crew-level view)
+  const searchCrewResults = hasSearch
+    ? (isSupervisor ? supervisorCrews : isAdmin && selectedSupervisorId ? selectedSupervisorCrews : crews)
+        .map(crew => ({ ...crew, score: getCrewSearchScore(crew, searchQuery) }))
+        .filter(crew => crew.score > 0)
+        .sort((a, b) => b.score - a.score)
+    : []
+
+  // Search results for supervisors (for admin supervisor-level view)
+  const searchSupervisorResults = hasSearch && isAdmin && !selectedSupervisorId
+    ? allSupervisors
+        .map(sup => ({ ...sup, score: getSupervisorSearchScore(sup, searchQuery) }))
+        .filter(sup => sup.score > 0)
+        .sort((a, b) => b.score - a.score)
+    : []
+
+  // Filter equipment based on role and selected crew (when not searching)
   const filteredEquipment = isForeman && userCrew
     ? equipment.filter(e => e.crew_id === userCrew.id)
     : isSupervisor && selectedCrewId
     ? selectedCrewId === 'my-equipment'
       ? supervisorOwnEquipment
       : equipment.filter(e => e.crew_id === selectedCrewId)
-    : isSupervisor
+    : isAdmin && selectedCrewId
+    ? equipment.filter(e => e.crew_id === selectedCrewId)
+    : isSupervisor || (isAdmin && !selectedCrewId)
     ? [] // Don't show equipment list on grid view
     : equipment
 
@@ -1945,12 +2061,22 @@ const EquipmentView = ({ equipment, crews, employees, profile, onRefresh, logAct
     }
   }
 
-  // When opening add modal, default to current selected crew for supervisors
+  // When opening add modal, default to current selected crew for supervisors/admins
   const openAddModal = () => {
-    if (isSupervisor && selectedCrewId && selectedCrewId !== 'my-equipment') {
+    if ((isSupervisor || isAdmin) && selectedCrewId && selectedCrewId !== 'my-equipment') {
       setNewEquipment({ ...newEquipment, crew_id: selectedCrewId })
     }
     setShowAddModal(true)
+  }
+
+  // Handle back navigation
+  const handleBack = () => {
+    if (selectedCrewId) {
+      setSelectedCrewId(null)
+    } else if (selectedSupervisorId) {
+      setSelectedSupervisorId(null)
+    }
+    setSearchQuery('')
   }
 
   const handleAdd = async () => {
@@ -2005,31 +2131,207 @@ const EquipmentView = ({ equipment, crews, employees, profile, onRefresh, logAct
   // Get selected crew name for title
   const getSelectedCrewTitle = () => {
     if (selectedCrewId === 'my-equipment') return 'My Equipment'
-    const crew = supervisorCrews.find(c => c.id === selectedCrewId)
-    return crew ? `${getForemanName(crew)}'s Crew Equipment` : ''
+    if (isSupervisor) {
+      const crew = supervisorCrews.find(c => c.id === selectedCrewId)
+      return crew ? `${getForemanName(crew)}'s Crew Equipment` : ''
+    }
+    if (isAdmin) {
+      const crew = crews.find(c => c.id === selectedCrewId)
+      return crew ? `${getForemanName(crew)}'s Crew Equipment` : ''
+    }
+    return ''
   }
+
+  // Get current view title for admin
+  const getAdminViewTitle = () => {
+    if (selectedCrewId) return getSelectedCrewTitle()
+    if (selectedSupervisorId) return `${getSupervisorName(selectedSupervisorId)}'s Crews`
+    return 'Equipment'
+  }
+
+  // Render equipment card helper
+  const renderEquipmentCard = (item) => {
+    const crew = crews.find(c => c.id === item.crew_id)
+    return (
+      <Card key={item.id} className={item.status === 'Out of Service' ? 'border-amber-700/50' : ''}>
+        {item.photo_url ? (
+          <div className="w-full h-40 mb-4 rounded-lg overflow-hidden bg-zinc-800"><img src={item.photo_url} alt={item.description} className="w-full h-full object-cover" /></div>
+        ) : (
+          <div className="w-full h-40 mb-4 rounded-lg bg-zinc-800 flex items-center justify-center text-zinc-600"><Icons.Camera /><span className="ml-2">No photo</span></div>
+        )}
+        <div className="space-y-2">
+          <div className="flex items-start justify-between">
+            <div><h3 className="font-semibold text-zinc-100">{item.description}</h3><p className="text-sm text-zinc-500">{item.type}</p></div>
+            <Badge variant={item.status === 'In Service' ? 'success' : 'warning'}>{item.status}</Badge>
+          </div>
+          <div className="text-sm text-zinc-400 space-y-1">
+            <p>Equipment #: <span className="text-zinc-300">{item.equipment_number}</span></p>
+            {!isForeman && crew && <p>Crew: <span className="text-zinc-300">{crew.name}</span></p>}
+          </div>
+          {item.notes && <p className="text-sm text-amber-400 bg-amber-900/20 rounded px-2 py-1">{item.notes}</p>}
+          <div className="flex gap-2 pt-2">
+            <Button variant="secondary" size="sm" onClick={() => setEditingEquipment(item)} className="flex-1"><span className="flex items-center justify-center gap-1"><Icons.Edit /> Edit</span></Button>
+            <Button variant="ghost" size="sm" onClick={() => handleDelete(item)}><Icons.Trash /></Button>
+          </div>
+        </div>
+      </Card>
+    )
+  }
+
+  // Determine current view state
+  const showSupervisorGrid = isSupervisor && !selectedCrewId && !hasSearch
+  const showAdminSupervisorGrid = isAdmin && !selectedSupervisorId && !selectedCrewId && !hasSearch
+  const showAdminCrewGrid = isAdmin && selectedSupervisorId && !selectedCrewId && !hasSearch
+  const showEquipmentList = isForeman || selectedCrewId || (isAdmin && !selectedSupervisorId && !hasSearch)
+  const showSearchResults = hasSearch && (isAdmin || isSupervisor)
 
   return (
     <div className="space-y-6">
-      {/* Supervisor Grid View - when no crew is selected */}
-      {isSupervisor && !selectedCrewId && (
-        <>
-          <div>
-            <h1 className="text-2xl font-bold text-zinc-100">Equipment</h1>
-            <p className="text-zinc-500">Select a crew to view their equipment</p>
+      {/* Header with search bar for Admin and Supervisor */}
+      {(isAdmin || isSupervisor) && !selectedCrewId && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            {(selectedSupervisorId || (isSupervisor && selectedCrewId)) && (
+              <button onClick={handleBack} className="text-zinc-400 hover:text-zinc-100 transition-colors">
+                <Icons.ChevronLeft />
+              </button>
+            )}
+            <div>
+              <h1 className="text-2xl font-bold text-zinc-100">
+                {isAdmin ? getAdminViewTitle() : 'Equipment'}
+              </h1>
+              <p className="text-zinc-500">
+                {hasSearch ? 'Search results' : isAdmin && !selectedSupervisorId ? 'Select a supervisor to view their crews' : isAdmin && selectedSupervisorId ? 'Select a crew to view their equipment' : 'Select a crew to view their equipment'}
+              </p>
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            {/* My Equipment square */}
-            <button
-              onClick={() => setSelectedCrewId('my-equipment')}
-              className="aspect-square bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 flex flex-col items-center justify-center hover:border-amber-500 hover:bg-zinc-800/80 transition-colors"
-            >
-              <div className="text-4xl text-amber-500 mb-2"><Icons.Truck /></div>
-              <h3 className="text-zinc-100 font-semibold text-center">My Equipment</h3>
-              <p className="text-zinc-500 text-sm">{supervisorOwnEquipment.length} items</p>
+          <Input
+            placeholder="Search equipment, crews, or foremen..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+      )}
+
+      {/* Search Results */}
+      {showSearchResults && (
+        <>
+          {/* Supervisor search results (admin only) */}
+          {isAdmin && !selectedSupervisorId && searchSupervisorResults.length > 0 && (
+            <div className="space-y-3">
+              <h2 className="text-lg font-semibold text-zinc-100">Supervisors</h2>
+              <div className="grid grid-cols-2 gap-4">
+                {searchSupervisorResults.map(sup => {
+                  const supCrews = crews.filter(c => c.supervisor_id === sup.id)
+                  const supEquipmentCount = equipment.filter(e => supCrews.some(c => c.id === e.crew_id)).length
+                  return (
+                    <button
+                      key={sup.id}
+                      onClick={() => { setSelectedSupervisorId(sup.id); setSearchQuery('') }}
+                      className="aspect-square bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 flex flex-col items-center justify-center hover:border-amber-500 hover:bg-zinc-800/80 transition-colors"
+                    >
+                      <div className="text-4xl text-amber-500 mb-2"><Icons.User /></div>
+                      <h3 className="text-zinc-100 font-semibold text-center">{sup.name}</h3>
+                      <p className="text-zinc-500 text-sm">{supCrews.length} crews • {supEquipmentCount} items</p>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Crew search results */}
+          {searchCrewResults.length > 0 && (
+            <div className="space-y-3">
+              <h2 className="text-lg font-semibold text-zinc-100">Crews</h2>
+              <div className="grid grid-cols-2 gap-4">
+                {searchCrewResults.map(crew => {
+                  const crewEquipmentCount = equipment.filter(e => e.crew_id === crew.id).length
+                  return (
+                    <button
+                      key={crew.id}
+                      onClick={() => { setSelectedCrewId(crew.id); if (isAdmin && !selectedSupervisorId) setSelectedSupervisorId(crew.supervisor_id); setSearchQuery('') }}
+                      className="aspect-square bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 flex flex-col items-center justify-center hover:border-amber-500 hover:bg-zinc-800/80 transition-colors"
+                    >
+                      <div className="text-4xl text-amber-500 mb-2"><Icons.Users /></div>
+                      <h3 className="text-zinc-100 font-semibold text-center">{getForemanName(crew)}'s Crew</h3>
+                      <p className="text-zinc-500 text-sm">{crewEquipmentCount} items</p>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Equipment search results */}
+          {searchEquipmentResults.length > 0 && (
+            <div className="space-y-3">
+              <h2 className="text-lg font-semibold text-zinc-100">Equipment ({searchEquipmentResults.length})</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {searchEquipmentResults.slice(0, 12).map(renderEquipmentCard)}
+              </div>
+              {searchEquipmentResults.length > 12 && (
+                <p className="text-sm text-zinc-500 text-center">Showing first 12 of {searchEquipmentResults.length} results. Refine your search for more specific results.</p>
+              )}
+            </div>
+          )}
+
+          {/* No results */}
+          {searchSupervisorResults.length === 0 && searchCrewResults.length === 0 && searchEquipmentResults.length === 0 && (
+            <Card className="text-center py-12">
+              <Icons.Search />
+              <p className="text-zinc-400 mt-4">No results found for "{searchQuery}"</p>
+            </Card>
+          )}
+        </>
+      )}
+
+      {/* Admin Supervisor Grid View */}
+      {showAdminSupervisorGrid && (
+        <div className="grid grid-cols-2 gap-4">
+          {allSupervisors.map(sup => {
+            const supCrews = crews.filter(c => c.supervisor_id === sup.id)
+            const supEquipmentCount = equipment.filter(e => supCrews.some(c => c.id === e.crew_id)).length
+            return (
+              <button
+                key={sup.id}
+                onClick={() => setSelectedSupervisorId(sup.id)}
+                className="aspect-square bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 flex flex-col items-center justify-center hover:border-amber-500 hover:bg-zinc-800/80 transition-colors"
+              >
+                <div className="text-4xl text-amber-500 mb-2"><Icons.User /></div>
+                <h3 className="text-zinc-100 font-semibold text-center">{sup.name}</h3>
+                <p className="text-zinc-500 text-sm">{supCrews.length} crews • {supEquipmentCount} items</p>
+              </button>
+            )
+          })}
+          {allSupervisors.length === 0 && (
+            <Card className="text-center py-12 col-span-2">
+              <Icons.User />
+              <p className="text-zinc-400 mt-4">No supervisors found</p>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Admin Crew Grid View (after selecting supervisor) */}
+      {showAdminCrewGrid && (
+        <>
+          <div className="flex items-center gap-3">
+            <button onClick={handleBack} className="text-zinc-400 hover:text-zinc-100 transition-colors">
+              <Icons.ChevronLeft />
             </button>
-            {/* Foreman crew squares */}
-            {supervisorCrews.map(crew => {
+            <div>
+              <h1 className="text-2xl font-bold text-zinc-100">{getSupervisorName(selectedSupervisorId)}'s Crews</h1>
+              <p className="text-zinc-500">Select a crew to view their equipment</p>
+            </div>
+          </div>
+          <Input
+            placeholder="Search crews or equipment..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          <div className="grid grid-cols-2 gap-4">
+            {selectedSupervisorCrews.map(crew => {
               const crewEquipmentCount = equipment.filter(e => e.crew_id === crew.id).length
               return (
                 <button
@@ -2043,26 +2345,57 @@ const EquipmentView = ({ equipment, crews, employees, profile, onRefresh, logAct
                 </button>
               )
             })}
+            {selectedSupervisorCrews.length === 0 && (
+              <Card className="text-center py-12 col-span-2">
+                <Icons.Users />
+                <p className="text-zinc-400 mt-4">No crews assigned to this supervisor</p>
+              </Card>
+            )}
           </div>
         </>
       )}
 
-      {/* Equipment List View - when a crew is selected (supervisors) or for foremen/admins */}
-      {(!isSupervisor || selectedCrewId) && (
+      {/* Supervisor Grid View */}
+      {showSupervisorGrid && (
+        <div className="grid grid-cols-2 gap-4">
+          <button
+            onClick={() => setSelectedCrewId('my-equipment')}
+            className="aspect-square bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 flex flex-col items-center justify-center hover:border-amber-500 hover:bg-zinc-800/80 transition-colors"
+          >
+            <div className="text-4xl text-amber-500 mb-2"><Icons.Truck /></div>
+            <h3 className="text-zinc-100 font-semibold text-center">My Equipment</h3>
+            <p className="text-zinc-500 text-sm">{supervisorOwnEquipment.length} items</p>
+          </button>
+          {supervisorCrews.map(crew => {
+            const crewEquipmentCount = equipment.filter(e => e.crew_id === crew.id).length
+            return (
+              <button
+                key={crew.id}
+                onClick={() => setSelectedCrewId(crew.id)}
+                className="aspect-square bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 flex flex-col items-center justify-center hover:border-amber-500 hover:bg-zinc-800/80 transition-colors"
+              >
+                <div className="text-4xl text-amber-500 mb-2"><Icons.Users /></div>
+                <h3 className="text-zinc-100 font-semibold text-center">{getForemanName(crew)}'s Crew</h3>
+                <p className="text-zinc-500 text-sm">{crewEquipmentCount} items</p>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Equipment List View */}
+      {(isForeman || selectedCrewId) && !hasSearch && (
         <>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              {isSupervisor && selectedCrewId && (
-                <button
-                  onClick={() => setSelectedCrewId(null)}
-                  className="text-zinc-400 hover:text-zinc-100 transition-colors"
-                >
+              {(isSupervisor || isAdmin) && selectedCrewId && (
+                <button onClick={handleBack} className="text-zinc-400 hover:text-zinc-100 transition-colors">
                   <Icons.ChevronLeft />
                 </button>
               )}
               <div>
                 <h1 className="text-2xl font-bold text-zinc-100">
-                  {isSupervisor ? getSelectedCrewTitle() : getTitle()}
+                  {isForeman ? getTitle() : getSelectedCrewTitle()}
                 </h1>
                 <p className="text-zinc-500">{filteredEquipment.length} items</p>
               </div>
@@ -2070,42 +2403,24 @@ const EquipmentView = ({ equipment, crews, employees, profile, onRefresh, logAct
             <Button onClick={openAddModal}><span className="flex items-center gap-2"><Icons.Plus /> Add Equipment</span></Button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredEquipment.map(item => {
-          const crew = crews.find(c => c.id === item.crew_id)
-          return (
-            <Card key={item.id} className={item.status === 'Out of Service' ? 'border-amber-700/50' : ''}>
-              {item.photo_url ? (
-                <div className="w-full h-40 mb-4 rounded-lg overflow-hidden bg-zinc-800"><img src={item.photo_url} alt={item.description} className="w-full h-full object-cover" /></div>
-              ) : (
-                <div className="w-full h-40 mb-4 rounded-lg bg-zinc-800 flex items-center justify-center text-zinc-600"><Icons.Camera /><span className="ml-2">No photo</span></div>
-              )}
-              <div className="space-y-2">
-                <div className="flex items-start justify-between">
-                  <div><h3 className="font-semibold text-zinc-100">{item.description}</h3><p className="text-sm text-zinc-500">{item.type}</p></div>
-                  <Badge variant={item.status === 'In Service' ? 'success' : 'warning'}>{item.status}</Badge>
-                </div>
-                <div className="text-sm text-zinc-400 space-y-1">
-                  <p>Equipment #: <span className="text-zinc-300">{item.equipment_number}</span></p>
-                  {!isForeman && crew && <p>Crew: <span className="text-zinc-300">{crew.name}</span></p>}
-                </div>
-                {item.notes && <p className="text-sm text-amber-400 bg-amber-900/20 rounded px-2 py-1">{item.notes}</p>}
-                <div className="flex gap-2 pt-2">
-                  <Button variant="secondary" size="sm" onClick={() => setEditingEquipment(item)} className="flex-1"><span className="flex items-center justify-center gap-1"><Icons.Edit /> Edit</span></Button>
-                  <Button variant="ghost" size="sm" onClick={() => handleDelete(item)}><Icons.Trash /></Button>
-                </div>
-              </div>
-            </Card>
-          )
-        })}
-
-          {filteredEquipment.length === 0 && (
-            <Card className="text-center py-12 col-span-full">
-              <Icons.Truck />
-              <p className="text-zinc-400 mt-4">No equipment {isSupervisor && selectedCrewId === 'my-equipment' ? 'assigned to you' : 'tracked'}</p>
-              <Button onClick={openAddModal} className="mt-4">Add Equipment</Button>
-            </Card>
+          {(isAdmin || isSupervisor) && (
+            <Input
+              placeholder="Search equipment..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
           )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredEquipment.map(renderEquipmentCard)}
+
+            {filteredEquipment.length === 0 && (
+              <Card className="text-center py-12 col-span-full">
+                <Icons.Truck />
+                <p className="text-zinc-400 mt-4">No equipment {(isSupervisor || isAdmin) && selectedCrewId === 'my-equipment' ? 'assigned to you' : 'tracked'}</p>
+                <Button onClick={openAddModal} className="mt-4">Add Equipment</Button>
+              </Card>
+            )}
           </div>
         </>
       )}
@@ -3395,7 +3710,7 @@ export default function App() {
       case 'users': return <UsersManagementView profiles={profiles} crews={crews} employees={employees} onRefresh={fetchAllData} logActivity={logActivity} />
       case 'employees': return <EmployeesView employees={employees} crews={crews} onRefresh={fetchAllData} readOnly={profile?.role !== 'admin'} logActivity={logActivity} />
       case 'crews': case 'my-crew': return <CrewsView crews={crews} employees={employees} profiles={profiles} profile={profile} onRefresh={fetchAllData} equipment={equipment} leakReports={leakReports} logActivity={logActivity} />
-      case 'equipment': case 'my-equipment': return <EquipmentView equipment={equipment} crews={crews} employees={employees} profile={profile} onRefresh={fetchAllData} logActivity={logActivity} />
+      case 'equipment': case 'my-equipment': return <EquipmentView equipment={equipment} crews={crews} employees={employees} profiles={profiles} profile={profile} onRefresh={fetchAllData} logActivity={logActivity} />
       case 'leak-reports': return <AdminLeakReportsView leakReports={leakReports} crews={crews} profiles={profiles} onRefresh={fetchAllData} employees={employees} logActivity={logActivity} />
       case 'my-leak-reports': return <ForemanLeakReportsView leakReports={leakReports} crews={crews} profile={profile} onRefresh={fetchAllData} logActivity={logActivity} />
       case 'review-reports': return <SupervisorReviewView leakReports={leakReports} crews={crews} profile={profile} onRefresh={fetchAllData} logActivity={logActivity} />
