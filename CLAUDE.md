@@ -18,7 +18,7 @@ This is a **Progressive Web App (PWA)** for managing construction crews, equipme
 
 ### Monolithic Single-File Architecture
 
-The entire application lives in **App.jsx** (~2,400 lines) as a single React component with clearly marked sections:
+The entire application lives in **App.jsx** (~3,500 lines) as a single React component with clearly marked sections:
 
 1. **AuthContext & Hooks** (top) - Session/profile context
 2. **UI Component Library** - Reusable components: Badge, Button, Card, Input, Select, Textarea, Toggle, LoadingScreen
@@ -215,3 +215,97 @@ To adjust field positions, edit coordinates in `createPdfTemplate.js` and regene
 node createPdfTemplate.js
 cp LeakReportTemplate.pdf public/
 ```
+
+### Equipment View (Role-Based Navigation)
+
+The Equipment view provides different navigation experiences based on user role:
+
+**Foreman View:**
+- Simple list of their crew's equipment
+- Can add/edit/delete equipment assigned to their crew
+
+**Supervisor View (2x2 Grid Navigation):**
+- First screen shows pressable square cards in a 2-column grid:
+  - "My Equipment" square (unassigned equipment)
+  - One square per crew they supervise, labeled "{Foreman Name}'s Crew"
+- Each square shows equipment count
+- Clicking a square navigates to that crew's equipment list
+- Back button (chevron left) returns to grid view
+- Search bar available for finding equipment
+
+**Admin View (3-Level Hierarchy):**
+1. **Supervisor Grid** - Shows all supervisors as squares with crew count and equipment count
+2. **Crew Grid** - After selecting supervisor, shows their crews as squares
+3. **Equipment List** - After selecting crew, shows that crew's equipment
+
+**Search Functionality (Admin & Supervisor):**
+- Search bar at top of grid views
+- Searches equipment by: description, equipment number, serial number, type, notes
+- Searches crews by: foreman name, crew name
+- Searches supervisors by: name (admin only)
+- Results organized into sections: Supervisors, Crews, Equipment
+- Clicking a result navigates directly to that item
+
+**Implementation:**
+- `selectedSupervisorId` state tracks which supervisor is selected (admin only)
+- `selectedCrewId` state tracks which crew's equipment to show
+- `searchQuery` state for search input
+- `getSearchScore()` function provides fuzzy matching with scoring
+- `handleBack()` navigates up one level and clears search
+
+### Admin Crews View (Drag-and-Drop)
+
+The Admin Crews view groups crews by supervisor with drag-and-drop reassignment:
+
+**Layout:**
+- Each supervisor has a block/section showing their name and assigned crews
+- Crews appear as cards within their supervisor's block
+- "Unassigned Crews" block at bottom for crews without a supervisor
+- Each crew card has a grip handle icon indicating it's draggable
+
+**Drag-and-Drop:**
+- Drag a crew card from one supervisor block to another
+- Drop zone highlights with amber border when dragging over
+- Dropping a crew updates its `supervisor_id` in the database
+- Activity is logged when crews are reassigned
+- Drop on "Unassigned" to remove supervisor assignment
+
+**Search Functionality:**
+- Search bar at top searches employees, crews, and supervisors
+- Employee results show: name, classification, crew assignment, foreman/supervisor
+- Indicates if employee is a foreman with badge
+- Shows "No crew assigned" for unassigned employees
+- Crew results show: name, foreman, supervisor, member count
+- Supervisor results show: name and crew count
+- Click View button to open crew details modal
+
+**Implementation:**
+- `draggedCrew` state tracks currently dragged crew
+- `dragOverSupervisor` state tracks which drop zone is active
+- `adminSearchQuery` state for search input
+- `adminSearchResults` computed array with scored results
+- `handleDragStart/End/Over/Leave/Drop` event handlers
+- `crewsBySupervisor` groups crews by supervisor ID
+- `unassignedCrews` filters crews without supervisor
+
+### Admin Employees Search
+
+The Admin Employees view includes a search bar for quickly finding employees:
+
+**Search Fields:**
+- Employee name
+- Employee number
+- Classification (Foreman, Operator, Welder, etc.)
+- Phone number
+
+**UI Features:**
+- Search bar above the employee table
+- Shows result count when searching (e.g., "3 results for 'john'")
+- Clear button to reset search
+- "No employees match" message when no results
+- Table updates instantly as you type
+
+**Implementation:**
+- `searchQuery` state in EmployeesView component
+- `filteredEmployees` computed array filters by search query
+- Case-insensitive partial matching on all searchable fields
