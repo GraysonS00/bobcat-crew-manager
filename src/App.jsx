@@ -332,6 +332,16 @@ const Icons = {
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
     </svg>
   ),
+  GripVertical: () => (
+    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+      <circle cx="9" cy="6" r="1.5" />
+      <circle cx="15" cy="6" r="1.5" />
+      <circle cx="9" cy="12" r="1.5" />
+      <circle cx="15" cy="12" r="1.5" />
+      <circle cx="9" cy="18" r="1.5" />
+      <circle cx="15" cy="18" r="1.5" />
+    </svg>
+  ),
 }
 
 // =============================================
@@ -1497,12 +1507,26 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, 
   const [newCrewName, setNewCrewName] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [draggedCrew, setDraggedCrew] = useState(null)
+  const [dragOverSupervisor, setDragOverSupervisor] = useState(null)
 
   const isForeman = profile?.role === 'foreman'
   const isSupervisor = profile?.role === 'supervisor'
   const isAdmin = profile?.role === 'admin'
   const userCrew = isForeman ? crews.find(c => c.foreman_user_id === profile.id) : null
   const supervisorCrews = isSupervisor ? crews.filter(c => c.supervisor_id === profile.id) : []
+
+  // Get all supervisors for admin view
+  const allSupervisors = isAdmin ? (profiles || []).filter(p => p.role === 'supervisor') : []
+
+  // Group crews by supervisor for admin view
+  const crewsBySupervisor = isAdmin ? allSupervisors.reduce((acc, sup) => {
+    acc[sup.id] = crews.filter(c => c.supervisor_id === sup.id)
+    return acc
+  }, {}) : {}
+
+  // Crews without a supervisor
+  const unassignedCrews = isAdmin ? crews.filter(c => !c.supervisor_id) : []
 
   const displayCrews = isForeman ? (userCrew ? [userCrew] : []) : isSupervisor ? supervisorCrews : crews
   const availableEmployees = employees.filter(e => e.active && e.classification !== 'Foreman')
@@ -1615,6 +1639,56 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, 
     setLoading(false)
   }
 
+  // Drag and drop handlers for admin crew reassignment
+  const handleDragStart = (e, crew) => {
+    setDraggedCrew(crew)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleDragEnd = () => {
+    setDraggedCrew(null)
+    setDragOverSupervisor(null)
+  }
+
+  const handleDragOver = (e, supervisorId) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDragOverSupervisor(supervisorId)
+  }
+
+  const handleDragLeave = () => {
+    setDragOverSupervisor(null)
+  }
+
+  const handleDrop = async (e, supervisorId) => {
+    e.preventDefault()
+    setDragOverSupervisor(null)
+
+    if (!draggedCrew || draggedCrew.supervisor_id === supervisorId) {
+      setDraggedCrew(null)
+      return
+    }
+
+    const newSupervisor = supervisorId ? profiles?.find(p => p.id === supervisorId) : null
+    const oldSupervisor = draggedCrew.supervisor_id ? profiles?.find(p => p.id === draggedCrew.supervisor_id) : null
+
+    const { error } = await supabase
+      .from('crews')
+      .update({ supervisor_id: supervisorId || null })
+      .eq('id', draggedCrew.id)
+
+    if (!error) {
+      if (logActivity) {
+        const action = supervisorId
+          ? `reassigned ${draggedCrew.name} to ${newSupervisor?.name || 'supervisor'}`
+          : `unassigned ${draggedCrew.name} from ${oldSupervisor?.name || 'supervisor'}`
+        await logActivity(action, 'crew', draggedCrew.id, draggedCrew.name)
+      }
+      onRefresh()
+    }
+    setDraggedCrew(null)
+  }
+
   if (isForeman && userCrew) {
     const crewMembers = employees.filter(e => userCrew.crew_members?.some(m => m.employee_id === e.id))
     const foreman = employees.find(e => e.id === userCrew.foreman_id)
@@ -1717,6 +1791,54 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, 
     )
   }
 
+  // Helper to render a crew card (used in both admin and supervisor views)
+  const renderCrewCard = (crew, isDraggable = false) => {
+    const foreman = employees.find(e => e.id === crew.foreman_id)
+    const supervisor = profiles?.find(p => p.id === crew.supervisor_id)
+    const members = employees.filter(e => crew.crew_members?.some(m => m.employee_id === e.id))
+
+    return (
+      <Card
+        key={crew.id}
+        className={`hover:border-zinc-700 ${isDraggable ? 'cursor-grab active:cursor-grabbing' : ''} ${draggedCrew?.id === crew.id ? 'opacity-50' : ''}`}
+        draggable={isDraggable}
+        onDragStart={isDraggable ? (e) => handleDragStart(e, crew) : undefined}
+        onDragEnd={isDraggable ? handleDragEnd : undefined}
+      >
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex items-center gap-3">
+            {isDraggable && (
+              <div className="text-zinc-500 cursor-grab">
+                <Icons.GripVertical />
+              </div>
+            )}
+            <div>
+              <h3 className="font-semibold text-zinc-100">{crew.name}</h3>
+              <p className="text-sm text-zinc-500">Foreman: {foreman?.name || 'Not assigned'}</p>
+              {!isAdmin && !isSupervisor && supervisor && <p className="text-sm text-zinc-500">Supervisor: {supervisor.name}</p>}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setSelectedCrew(crew)}><span className="flex items-center gap-1"><Icons.Eye /> View</span></Button>
+            {(isSupervisor || isAdmin) && (
+              <Button variant="ghost" size="sm" onClick={() => startEditing(crew)}><span className="flex items-center gap-1"><Icons.Edit /> Edit</span></Button>
+            )}
+            {isAdmin && (
+              <button onClick={() => setShowDeleteConfirm(crew)} className="p-2 text-zinc-400 hover:text-red-400 hover:bg-zinc-700 rounded-lg">
+                <Icons.Trash />
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {members.slice(0, 3).map(m => <div key={m.id} className="px-2 py-1 bg-zinc-800 rounded text-sm text-zinc-300">{m.name}</div>)}
+          {members.length > 3 && <span className="px-2 py-1 text-sm text-zinc-500">+{members.length - 3} more</span>}
+          {members.length === 0 && <span className="text-sm text-zinc-500">No members assigned</span>}
+        </div>
+      </Card>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -1727,43 +1849,89 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, 
         {isAdmin && <Button onClick={() => setShowAddCrew(true)}><span className="flex items-center gap-2"><Icons.Plus /> Add Crew</span></Button>}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {displayCrews.map(crew => {
-          const foreman = employees.find(e => e.id === crew.foreman_id)
-          const supervisor = profiles?.find(p => p.id === crew.supervisor_id)
-          const members = employees.filter(e => crew.crew_members?.some(m => m.employee_id === e.id))
-          
-          return (
-            <Card key={crew.id} className="hover:border-zinc-700">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="font-semibold text-zinc-100">{crew.name}</h3>
-                  <p className="text-sm text-zinc-500">Foreman: {foreman?.name || 'Not assigned'}</p>
-                  {!isSupervisor && supervisor && <p className="text-sm text-zinc-500">Supervisor: {supervisor.name}</p>}
-                </div>
-                <div className="flex gap-2">
-                  <Button variant="ghost" size="sm" onClick={() => setSelectedCrew(crew)}><span className="flex items-center gap-1"><Icons.Eye /> View</span></Button>
-                  {(isSupervisor || isAdmin) && (
-                    <Button variant="ghost" size="sm" onClick={() => startEditing(crew)}><span className="flex items-center gap-1"><Icons.Edit /> Edit</span></Button>
-                  )}
-                  {isAdmin && (
-                    <button onClick={() => setShowDeleteConfirm(crew)} className="p-2 text-zinc-400 hover:text-red-400 hover:bg-zinc-700 rounded-lg">
-                      <Icons.Trash />
-                    </button>
-                  )}
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {members.slice(0, 3).map(m => <div key={m.id} className="px-2 py-1 bg-zinc-800 rounded text-sm text-zinc-300">{m.name}</div>)}
-                {members.length > 3 && <span className="px-2 py-1 text-sm text-zinc-500">+{members.length - 3} more</span>}
-                {members.length === 0 && <span className="text-sm text-zinc-500">No members assigned</span>}
-              </div>
-            </Card>
-          )
-        })}
-      </div>
+      {/* Admin View - Crews grouped by supervisor with drag-and-drop */}
+      {isAdmin && (
+        <div className="space-y-6">
+          <p className="text-sm text-zinc-400">Drag crews between supervisors to reassign them</p>
 
-      {displayCrews.length === 0 && <Card className="text-center py-12"><p className="text-zinc-400">{isSupervisor ? 'No crews assigned to you' : 'No crews created yet'}</p></Card>}
+          {/* Supervisor blocks */}
+          {allSupervisors.map(sup => (
+            <div
+              key={sup.id}
+              className={`bg-zinc-900/50 border rounded-xl p-4 transition-colors ${dragOverSupervisor === sup.id ? 'border-amber-500 bg-amber-500/5' : 'border-zinc-800'}`}
+              onDragOver={(e) => handleDragOver(e, sup.id)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, sup.id)}
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-sky-500/20 rounded-full flex items-center justify-center text-sky-400">
+                  <Icons.User />
+                </div>
+                <div>
+                  <h2 className="font-semibold text-zinc-100">{sup.name}</h2>
+                  <p className="text-sm text-zinc-500">{crewsBySupervisor[sup.id]?.length || 0} crews assigned</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {(crewsBySupervisor[sup.id] || []).map(crew => renderCrewCard(crew, true))}
+                {(crewsBySupervisor[sup.id] || []).length === 0 && (
+                  <div className="col-span-full py-8 text-center text-zinc-500 border-2 border-dashed border-zinc-700 rounded-lg">
+                    Drop crews here to assign to {sup.name}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+
+          {/* Unassigned crews block */}
+          <div
+            className={`bg-zinc-900/50 border rounded-xl p-4 transition-colors ${dragOverSupervisor === 'unassigned' ? 'border-amber-500 bg-amber-500/5' : 'border-zinc-800'}`}
+            onDragOver={(e) => handleDragOver(e, 'unassigned')}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, null)}
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-zinc-700 rounded-full flex items-center justify-center text-zinc-400">
+                <Icons.Users />
+              </div>
+              <div>
+                <h2 className="font-semibold text-zinc-100">Unassigned Crews</h2>
+                <p className="text-sm text-zinc-500">{unassignedCrews.length} crews without supervisor</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {unassignedCrews.map(crew => renderCrewCard(crew, true))}
+              {unassignedCrews.length === 0 && !draggedCrew && (
+                <div className="col-span-full py-8 text-center text-zinc-500 border-2 border-dashed border-zinc-700 rounded-lg">
+                  All crews are assigned to supervisors
+                </div>
+              )}
+              {unassignedCrews.length === 0 && draggedCrew && (
+                <div className="col-span-full py-8 text-center text-zinc-500 border-2 border-dashed border-zinc-700 rounded-lg">
+                  Drop here to unassign from supervisor
+                </div>
+              )}
+            </div>
+          </div>
+
+          {allSupervisors.length === 0 && unassignedCrews.length === 0 && (
+            <Card className="text-center py-12">
+              <p className="text-zinc-400">No crews created yet</p>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Supervisor View - Simple grid of their crews */}
+      {isSupervisor && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {displayCrews.map(crew => renderCrewCard(crew, false))}
+        </div>
+      )}
+
+      {isSupervisor && displayCrews.length === 0 && (
+        <Card className="text-center py-12"><p className="text-zinc-400">No crews assigned to you</p></Card>
+      )}
 
       {selectedCrew && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
