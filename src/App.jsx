@@ -1891,11 +1891,12 @@ const CrewsView = ({ crews, employees, profiles, profile, onRefresh, equipment, 
 // EQUIPMENT VIEW
 // =============================================
 
-const EquipmentView = ({ equipment, crews, profile, onRefresh, logActivity }) => {
+const EquipmentView = ({ equipment, crews, employees, profile, onRefresh, logActivity }) => {
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingEquipment, setEditingEquipment] = useState(null)
   const [loading, setLoading] = useState(false)
   const [newEquipment, setNewEquipment] = useState({ type: 'Tool', description: '', equipment_number: '', serial_number: '', photo_url: null, status: 'In Service', notes: '', crew_id: '' })
+  const [activeCrewTab, setActiveCrewTab] = useState('my-equipment')
 
   const isForeman = profile?.role === 'foreman'
   const isSupervisor = profile?.role === 'supervisor'
@@ -1903,11 +1904,24 @@ const EquipmentView = ({ equipment, crews, profile, onRefresh, logActivity }) =>
   const userCrew = isForeman ? crews.find(c => c.foreman_user_id === profile.id) : null
   const supervisorCrews = isSupervisor ? crews.filter(c => c.supervisor_id === profile.id) : []
 
-  // Filter equipment based on role
+  // Get foreman name for a crew
+  const getForemanName = (crew) => {
+    const foreman = employees?.find(e => e.id === crew.foreman_id)
+    return foreman?.name || crew.name
+  }
+
+  // For supervisors: equipment not assigned to any of their crews = "My Equipment"
+  const supervisorOwnEquipment = isSupervisor
+    ? equipment.filter(e => !e.crew_id || !supervisorCrews.some(c => c.id === e.crew_id))
+    : []
+
+  // Filter equipment based on role and active tab
   const filteredEquipment = isForeman && userCrew
     ? equipment.filter(e => e.crew_id === userCrew.id)
     : isSupervisor
-    ? equipment.filter(e => supervisorCrews.some(c => c.id === e.crew_id))
+    ? activeCrewTab === 'my-equipment'
+      ? supervisorOwnEquipment
+      : equipment.filter(e => e.crew_id === activeCrewTab)
     : equipment
 
   const equipmentTypes = ['Truck', 'Trailer', 'Excavator', 'Tool', 'Other']
@@ -1924,9 +1938,17 @@ const EquipmentView = ({ equipment, crews, profile, onRefresh, logActivity }) =>
     }
   }
 
+  // When opening add modal, default to current tab's crew for supervisors
+  const openAddModal = () => {
+    if (isSupervisor && activeCrewTab !== 'my-equipment') {
+      setNewEquipment({ ...newEquipment, crew_id: activeCrewTab })
+    }
+    setShowAddModal(true)
+  }
+
   const handleAdd = async () => {
     setLoading(true)
-    // For foremen, use their crew. For supervisors, use selected crew. For admins, use selected crew or null.
+    // For foremen, use their crew. For supervisors/admins, use selected crew or null.
     const crewId = isForeman ? userCrew?.id : (newEquipment.crew_id || null)
     const { data } = await supabase.from('equipment').insert([{ ...newEquipment, crew_id: crewId }]).select()
     if (data?.[0] && logActivity) {
@@ -1980,8 +2002,33 @@ const EquipmentView = ({ equipment, crews, profile, onRefresh, logActivity }) =>
           <h1 className="text-2xl font-bold text-zinc-100">{getTitle()}</h1>
           <p className="text-zinc-500">{filteredEquipment.length} items</p>
         </div>
-        <Button onClick={() => setShowAddModal(true)}><span className="flex items-center gap-2"><Icons.Plus /> Add Equipment</span></Button>
+        <Button onClick={openAddModal}><span className="flex items-center gap-2"><Icons.Plus /> Add Equipment</span></Button>
       </div>
+
+      {isSupervisor && (
+        <div className="flex gap-2 flex-wrap">
+          <TabButton
+            active={activeCrewTab === 'my-equipment'}
+            onClick={() => setActiveCrewTab('my-equipment')}
+            count={supervisorOwnEquipment.length}
+          >
+            My Equipment
+          </TabButton>
+          {supervisorCrews.map(crew => {
+            const crewEquipmentCount = equipment.filter(e => e.crew_id === crew.id).length
+            return (
+              <TabButton
+                key={crew.id}
+                active={activeCrewTab === crew.id}
+                onClick={() => setActiveCrewTab(crew.id)}
+                count={crewEquipmentCount}
+              >
+                {getForemanName(crew)}
+              </TabButton>
+            )
+          })}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredEquipment.map(item => {
@@ -2016,8 +2063,8 @@ const EquipmentView = ({ equipment, crews, profile, onRefresh, logActivity }) =>
       {filteredEquipment.length === 0 && (
         <Card className="text-center py-12">
           <Icons.Truck />
-          <p className="text-zinc-400 mt-4">No equipment tracked</p>
-          <Button onClick={() => setShowAddModal(true)} className="mt-4">Add Equipment</Button>
+          <p className="text-zinc-400 mt-4">No equipment {isSupervisor && activeCrewTab === 'my-equipment' ? 'assigned to you' : 'tracked'}</p>
+          <Button onClick={openAddModal} className="mt-4">Add Equipment</Button>
         </Card>
       )}
 
@@ -2031,12 +2078,12 @@ const EquipmentView = ({ equipment, crews, profile, onRefresh, logActivity }) =>
             <div className="space-y-4">
               {(isSupervisor || isAdmin) && (
                 <Select
-                  label="Assign to Crew"
+                  label="Assign to"
                   value={newEquipment.crew_id}
                   onChange={(e) => setNewEquipment({ ...newEquipment, crew_id: e.target.value })}
                   options={[
-                    { value: '', label: 'Select a crew...' },
-                    ...(isSupervisor ? supervisorCrews : crews).map(c => ({ value: c.id, label: c.name }))
+                    { value: '', label: 'My Equipment (Unassigned)' },
+                    ...(isSupervisor ? supervisorCrews : crews).map(c => ({ value: c.id, label: `${getForemanName(c)}'s Crew` }))
                   ]}
                 />
               )}
@@ -2054,7 +2101,7 @@ const EquipmentView = ({ equipment, crews, profile, onRefresh, logActivity }) =>
               <Textarea label="Notes" value={newEquipment.notes} onChange={(e) => setNewEquipment({ ...newEquipment, notes: e.target.value })} />
               <div className="flex gap-3 pt-4">
                 <Button variant="secondary" onClick={() => setShowAddModal(false)} className="flex-1">Cancel</Button>
-                <Button onClick={handleAdd} loading={loading} className="flex-1" disabled={!newEquipment.description || !newEquipment.equipment_number || (isSupervisor && !newEquipment.crew_id)}>Add</Button>
+                <Button onClick={handleAdd} loading={loading} className="flex-1" disabled={!newEquipment.description || !newEquipment.equipment_number}>Add</Button>
               </div>
             </div>
           </Card>
@@ -2071,12 +2118,12 @@ const EquipmentView = ({ equipment, crews, profile, onRefresh, logActivity }) =>
             <div className="space-y-4">
               {(isSupervisor || isAdmin) && (
                 <Select
-                  label="Assigned Crew"
+                  label="Assigned to"
                   value={editingEquipment.crew_id || ''}
                   onChange={(e) => setEditingEquipment({ ...editingEquipment, crew_id: e.target.value })}
                   options={[
-                    { value: '', label: 'Unassigned' },
-                    ...(isSupervisor ? supervisorCrews : crews).map(c => ({ value: c.id, label: c.name }))
+                    { value: '', label: 'My Equipment (Unassigned)' },
+                    ...(isSupervisor ? supervisorCrews : crews).map(c => ({ value: c.id, label: `${getForemanName(c)}'s Crew` }))
                   ]}
                 />
               )}
@@ -3306,7 +3353,7 @@ export default function App() {
       case 'users': return <UsersManagementView profiles={profiles} crews={crews} employees={employees} onRefresh={fetchAllData} logActivity={logActivity} />
       case 'employees': return <EmployeesView employees={employees} crews={crews} onRefresh={fetchAllData} readOnly={profile?.role !== 'admin'} logActivity={logActivity} />
       case 'crews': case 'my-crew': return <CrewsView crews={crews} employees={employees} profiles={profiles} profile={profile} onRefresh={fetchAllData} equipment={equipment} leakReports={leakReports} logActivity={logActivity} />
-      case 'equipment': case 'my-equipment': return <EquipmentView equipment={equipment} crews={crews} profile={profile} onRefresh={fetchAllData} logActivity={logActivity} />
+      case 'equipment': case 'my-equipment': return <EquipmentView equipment={equipment} crews={crews} employees={employees} profile={profile} onRefresh={fetchAllData} logActivity={logActivity} />
       case 'leak-reports': return <AdminLeakReportsView leakReports={leakReports} crews={crews} profiles={profiles} onRefresh={fetchAllData} employees={employees} logActivity={logActivity} />
       case 'my-leak-reports': return <ForemanLeakReportsView leakReports={leakReports} crews={crews} profile={profile} onRefresh={fetchAllData} logActivity={logActivity} />
       case 'review-reports': return <SupervisorReviewView leakReports={leakReports} crews={crews} profile={profile} onRefresh={fetchAllData} logActivity={logActivity} />
