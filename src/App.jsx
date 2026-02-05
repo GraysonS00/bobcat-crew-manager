@@ -449,18 +449,23 @@ const Navigation = ({ currentView, setCurrentView, profile, onLogout }) => {
       { id: 'crews', label: 'Crews', icon: Icons.Users },
       { id: 'equipment', label: 'Equipment', icon: Icons.Truck },
       { id: 'leak-reports', label: 'Leak Reports', icon: Icons.Document },
+      { id: 'job-submissions', label: 'Jobs', icon: Icons.Clipboard },
+      { id: 'job-settings', label: 'Job Settings', icon: Icons.Settings },
     ],
     supervisor: [
       { id: 'dashboard', label: 'Dashboard', icon: Icons.Home },
       { id: 'crews', label: 'My Crews', icon: Icons.Users },
       { id: 'equipment', label: 'Equipment', icon: Icons.Truck },
       { id: 'review-reports', label: 'Review Reports', icon: Icons.Document },
+      { id: 'submit-job', label: 'Submit Job', icon: Icons.Clipboard },
+      { id: 'review-jobs', label: 'Review Jobs', icon: Icons.CheckCircle },
     ],
     foreman: [
       { id: 'dashboard', label: 'Dashboard', icon: Icons.Home },
       { id: 'my-crew', label: 'My Crew', icon: Icons.Users },
       { id: 'my-equipment', label: 'Equipment', icon: Icons.Truck },
       { id: 'my-leak-reports', label: 'Leak Reports', icon: Icons.Document },
+      { id: 'submit-job', label: 'Submit Job', icon: Icons.Clipboard },
     ],
   }
 
@@ -908,7 +913,7 @@ const UsersManagementView = ({ profiles, crews, employees, onRefresh, logActivit
 // DASHBOARD
 // =============================================
 
-const Dashboard = ({ profile, crews, employees, equipment, leakReports, activityLogs = [] }) => {
+const Dashboard = ({ profile, crews, employees, equipment, leakReports, activityLogs = [], jobSubmissions = [], sequenceAssignments = [], jobSequences = [] }) => {
   const [activitySearch, setActivitySearch] = useState('')
   const [foremanActivitySearch, setForemanActivitySearch] = useState('')
 
@@ -925,11 +930,16 @@ const Dashboard = ({ profile, crews, employees, equipment, leakReports, activity
   })
   const isForeman = profile?.role === 'foreman'
   const isSupervisor = profile?.role === 'supervisor'
+  const isAdmin = profile?.role === 'admin'
   const userCrew = isForeman ? crews.find(c => c.foreman_user_id === profile.id) : null
   const supervisorCrews = isSupervisor ? crews.filter(c => c.supervisor_id === profile.id) : []
 
   // Get foreman user IDs for supervisor's crews
   const foremanUserIds = supervisorCrews.map(c => c.foreman_user_id).filter(Boolean)
+
+  // Job submission counts
+  const pendingForemanJobs = isSupervisor ? jobSubmissions.filter(j => j.status === 'pending_supervisor' && foremanUserIds.includes(j.submitted_by)).length : 0
+  const pendingAdminJobs = isAdmin ? jobSubmissions.filter(j => j.status === 'pending_admin').length : 0
 
   // Filter activity logs to show only activity from supervisor's foremen
   const foremanActivityLogs = activityLogs.filter(log => {
@@ -1017,6 +1027,22 @@ const Dashboard = ({ profile, crews, employees, equipment, leakReports, activity
                 <h3 className="font-semibold text-amber-400">Reports Need Review</h3>
                 <p className="text-sm text-zinc-400 mt-1">
                   You have {pendingReports.length} leak report{pendingReports.length > 1 ? 's' : ''} waiting for review.
+                </p>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {pendingForemanJobs > 0 && (
+          <Card className="border-sky-700/50 bg-sky-900/10">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 bg-sky-500/20 rounded-lg flex items-center justify-center text-sky-400 flex-shrink-0">
+                <Icons.Clipboard />
+              </div>
+              <div>
+                <h3 className="font-semibold text-sky-400">Job Submissions Need Review</h3>
+                <p className="text-sm text-zinc-400 mt-1">
+                  You have {pendingForemanJobs} job submission{pendingForemanJobs > 1 ? 's' : ''} from your foremen waiting for review.
                 </p>
               </div>
             </div>
@@ -1188,6 +1214,22 @@ const Dashboard = ({ profile, crews, employees, equipment, leakReports, activity
               <h3 className="font-semibold text-amber-400">Equipment Alert</h3>
               <p className="text-sm text-zinc-400 mt-1">
                 {outOfServiceCount} piece{outOfServiceCount > 1 ? 's' : ''} of equipment marked out of service.
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {pendingAdminJobs > 0 && isAdmin && (
+        <Card className="border-sky-700/50 bg-sky-900/10">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 bg-sky-500/20 rounded-lg flex items-center justify-center text-sky-400 flex-shrink-0">
+              <Icons.Clipboard />
+            </div>
+            <div>
+              <h3 className="font-semibold text-sky-400">Job Submissions Pending Approval</h3>
+              <p className="text-sm text-zinc-400 mt-1">
+                {pendingAdminJobs} job submission{pendingAdminJobs > 1 ? 's' : ''} waiting for approval.
               </p>
             </div>
           </div>
@@ -3993,6 +4035,1034 @@ const AdminLeakReportsView = ({ leakReports, crews, profiles, onRefresh, employe
 }
 
 // =============================================
+// JOB SETTINGS VIEW (Admin - Sequence Management)
+// =============================================
+
+const JobSettingsView = ({ jobSequences, sequenceAssignments, profiles, onRefresh, logActivity }) => {
+  const [editingSequence, setEditingSequence] = useState(null)
+  const [newSequencePrefix, setNewSequencePrefix] = useState('')
+  const [showAddSequence, setShowAddSequence] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const supervisors = profiles.filter(p => p.role === 'supervisor')
+
+  const getAssignedSequence = (supervisorId) => {
+    const assignment = sequenceAssignments.find(a => a.supervisor_id === supervisorId)
+    if (!assignment) return null
+    return jobSequences.find(s => s.id === assignment.sequence_id)
+  }
+
+  const handleUpdateSequenceCount = async (sequenceId, newCount) => {
+    setLoading(true)
+    const { error } = await supabase
+      .from('job_number_sequences')
+      .update({ current_count: parseInt(newCount) || 0 })
+      .eq('id', sequenceId)
+
+    if (!error) {
+      const seq = jobSequences.find(s => s.id === sequenceId)
+      if (logActivity) {
+        await logActivity('updated count for', 'sequence', sequenceId, seq?.prefix, { new_count: newCount })
+      }
+      onRefresh()
+      setEditingSequence(null)
+    }
+    setLoading(false)
+  }
+
+  const handleAddSequence = async () => {
+    if (!newSequencePrefix.trim()) return
+    setLoading(true)
+    setError('')
+
+    const { data, error: insertError } = await supabase
+      .from('job_number_sequences')
+      .insert([{ prefix: newSequencePrefix.trim(), current_count: 0 }])
+      .select()
+
+    if (insertError) {
+      setError(insertError.message)
+    } else {
+      if (logActivity) {
+        await logActivity('created', 'sequence', data?.[0]?.id, newSequencePrefix.trim())
+      }
+      setNewSequencePrefix('')
+      setShowAddSequence(false)
+      onRefresh()
+    }
+    setLoading(false)
+  }
+
+  const handleAssignSupervisor = async (supervisorId, sequenceId) => {
+    setLoading(true)
+    const supervisor = profiles.find(p => p.id === supervisorId)
+    const sequence = jobSequences.find(s => s.id === sequenceId)
+
+    // Check if assignment already exists
+    const existingAssignment = sequenceAssignments.find(a => a.supervisor_id === supervisorId)
+
+    if (existingAssignment) {
+      if (sequenceId) {
+        // Update existing
+        await supabase
+          .from('supervisor_sequence_assignments')
+          .update({ sequence_id: sequenceId })
+          .eq('id', existingAssignment.id)
+      } else {
+        // Delete assignment
+        await supabase
+          .from('supervisor_sequence_assignments')
+          .delete()
+          .eq('id', existingAssignment.id)
+      }
+    } else if (sequenceId) {
+      // Create new assignment
+      await supabase
+        .from('supervisor_sequence_assignments')
+        .insert([{ supervisor_id: supervisorId, sequence_id: sequenceId }])
+    }
+
+    if (logActivity) {
+      await logActivity(sequenceId ? `assigned ${sequence?.prefix} to` : 'removed sequence from', 'supervisor', supervisorId, supervisor?.name)
+    }
+    onRefresh()
+    setLoading(false)
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-zinc-100">Job Number Settings</h1>
+        <p className="text-zinc-500">Manage job number sequences and supervisor assignments</p>
+      </div>
+
+      {/* Job Number Sequences */}
+      <Card>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-zinc-100">Job Number Sequences</h2>
+          <Button onClick={() => setShowAddSequence(true)} size="sm">
+            <span className="flex items-center gap-2"><Icons.Plus /> Add Sequence</span>
+          </Button>
+        </div>
+        <p className="text-sm text-zinc-500 mb-4">Each sequence tracks its own counter. Job numbers are formatted as PREFIX-XXXXX.</p>
+
+        <div className="space-y-3">
+          {jobSequences.map(seq => (
+            <div key={seq.id} className="flex items-center justify-between p-4 bg-zinc-800/50 rounded-lg">
+              <div>
+                <p className="font-medium text-zinc-200">{seq.prefix}</p>
+                <p className="text-sm text-zinc-500">
+                  Next job: <span className="text-amber-400">{seq.prefix}-{String(seq.current_count + 1).padStart(5, '0')}</span>
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                {editingSequence?.id === seq.id ? (
+                  <>
+                    <input
+                      type="number"
+                      value={editingSequence.current_count}
+                      onChange={(e) => setEditingSequence({ ...editingSequence, current_count: e.target.value })}
+                      className="w-24 bg-zinc-700 border border-zinc-600 rounded px-2 py-1 text-zinc-100 text-sm"
+                    />
+                    <Button size="sm" onClick={() => handleUpdateSequenceCount(seq.id, editingSequence.current_count)} loading={loading}>Save</Button>
+                    <Button size="sm" variant="secondary" onClick={() => setEditingSequence(null)}>Cancel</Button>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-zinc-400 text-sm">Current: {seq.current_count}</span>
+                    <Button size="sm" variant="ghost" onClick={() => setEditingSequence(seq)}>
+                      <Icons.Edit />
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+          {jobSequences.length === 0 && (
+            <p className="text-zinc-500 text-center py-4">No sequences configured. Add one to get started.</p>
+          )}
+        </div>
+      </Card>
+
+      {/* Supervisor Assignments */}
+      <Card>
+        <h2 className="text-lg font-semibold text-zinc-100 mb-4">Supervisor Sequence Assignments</h2>
+        <p className="text-sm text-zinc-500 mb-4">Assign each supervisor to a job number sequence. Jobs submitted by them (or their foremen) will use this sequence.</p>
+
+        <div className="space-y-3">
+          {supervisors.map(sup => {
+            const assignedSeq = getAssignedSequence(sup.id)
+            return (
+              <div key={sup.id} className="flex items-center justify-between p-4 bg-zinc-800/50 rounded-lg">
+                <div>
+                  <p className="font-medium text-zinc-200">{sup.name}</p>
+                  {assignedSeq && (
+                    <p className="text-sm text-zinc-500">Sequence: <span className="text-emerald-400">{assignedSeq.prefix}</span></p>
+                  )}
+                </div>
+                <Select
+                  value={assignedSeq?.id || ''}
+                  onChange={(e) => handleAssignSupervisor(sup.id, e.target.value || null)}
+                  options={[
+                    { value: '', label: 'Not assigned' },
+                    ...jobSequences.map(s => ({ value: s.id, label: s.prefix }))
+                  ]}
+                  disabled={loading}
+                />
+              </div>
+            )
+          })}
+          {supervisors.length === 0 && (
+            <p className="text-zinc-500 text-center py-4">No supervisors found. Create supervisor accounts first.</p>
+          )}
+        </div>
+      </Card>
+
+      {/* Add Sequence Modal */}
+      {showAddSequence && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-zinc-100">Add Job Number Sequence</h2>
+              <button onClick={() => { setShowAddSequence(false); setError('') }} className="text-zinc-400 hover:text-zinc-200">
+                <Icons.X />
+              </button>
+            </div>
+
+            {error && <p className="text-red-400 text-sm bg-red-900/20 border border-red-800 rounded-lg px-3 py-2 mb-4">{error}</p>}
+
+            <div className="space-y-4">
+              <Input
+                label="Sequence Prefix"
+                value={newSequencePrefix}
+                onChange={(e) => setNewSequencePrefix(e.target.value)}
+                placeholder="e.g., 01-D05"
+              />
+              <p className="text-sm text-zinc-500">Job numbers will be formatted as: {newSequencePrefix || 'PREFIX'}-00001</p>
+
+              <div className="flex gap-3 pt-4">
+                <Button variant="secondary" onClick={() => { setShowAddSequence(false); setError('') }} className="flex-1">Cancel</Button>
+                <Button onClick={handleAddSequence} loading={loading} className="flex-1" disabled={!newSequencePrefix.trim()}>
+                  Add Sequence
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// =============================================
+// SUBMIT JOB VIEW (Supervisor/Foreman)
+// =============================================
+
+const JOB_TYPES = [
+  { value: 'regular_leak', label: 'Regular Leak' },
+  { value: 'grade_1', label: 'Grade 1' },
+  { value: 'copper_service', label: 'Copper Service' },
+  { value: 'per_foot', label: 'Per Foot' },
+  { value: 'bid', label: 'BID' },
+]
+
+const JOB_TYPE_PREFIXES = {
+  regular_leak: '',
+  grade_1: 'CO - Grade 1 - ',
+  copper_service: 'CSVP - ',
+  per_foot: 'Per Foot - ',
+  bid: 'BID - ',
+}
+
+const getJobTypeLabel = (value) => JOB_TYPES.find(t => t.value === value)?.label || value
+const getAddressWithPrefix = (jobType, address) => (JOB_TYPE_PREFIXES[jobType] || '') + address
+
+const SubmitJobView = ({ profile, crews, jobSubmissions, jobSequences, sequenceAssignments, onRefresh, logActivity }) => {
+  const [formData, setFormData] = useState({
+    job_type: 'regular_leak',
+    address: '',
+    fcc: '',
+    leak_number: '',
+    project_number: '',
+  })
+  const [loading, setLoading] = useState(false)
+  const [success, setSuccess] = useState('')
+  const [error, setError] = useState('')
+
+  const isForeman = profile?.role === 'foreman'
+  const isSupervisor = profile?.role === 'supervisor'
+  const isAdmin = profile?.role === 'admin'
+  const [selectedSequenceId, setSelectedSequenceId] = useState('')
+
+  // Check if user can submit (has a sequence assigned via their supervisor)
+  const getUserSequenceId = () => {
+    if (isAdmin) return selectedSequenceId || null
+
+    if (isSupervisor) {
+      const assignment = sequenceAssignments.find(a => a.supervisor_id === profile.id)
+      return assignment?.sequence_id || null
+    }
+
+    if (isForeman) {
+      // Find the crew this foreman is assigned to
+      const foremanCrew = crews.find(c => c.foreman_user_id === profile.id)
+      if (!foremanCrew?.supervisor_id) return null
+      // Get the supervisor's sequence
+      const assignment = sequenceAssignments.find(a => a.supervisor_id === foremanCrew.supervisor_id)
+      return assignment?.sequence_id || null
+    }
+
+    return null
+  }
+
+  const canSubmit = isAdmin || getUserSequenceId() !== null
+
+  // Get user's submissions
+  const mySubmissions = jobSubmissions.filter(j => j.submitted_by === profile.id)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!formData.address.trim()) return
+
+    setLoading(true)
+    setError('')
+    setSuccess('')
+
+    const status = isForeman ? 'pending_supervisor' : 'pending_admin'
+    const sequenceId = isAdmin ? selectedSequenceId : getUserSequenceId()
+
+    const { data, error: insertError } = await supabase
+      .from('job_submissions')
+      .insert([{
+        submitted_by: profile.id,
+        status,
+        job_type: formData.job_type,
+        address: formData.address.trim(),
+        fcc: formData.fcc.trim() || null,
+        leak_number: formData.leak_number.trim() || null,
+        project_number: formData.project_number.trim() || null,
+        sequence_id: sequenceId || null,
+      }])
+      .select()
+
+    if (insertError) {
+      setError(insertError.message)
+    } else {
+      setSuccess('Job submitted successfully!')
+      if (logActivity) {
+        await logActivity('submitted', 'job_submission', data?.[0]?.id, formData.address.trim())
+      }
+      setFormData({ job_type: 'regular_leak', address: '', fcc: '', leak_number: '', project_number: '' })
+      onRefresh()
+    }
+
+    setLoading(false)
+  }
+
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case 'pending_supervisor': return <Badge variant="warning">Pending Supervisor</Badge>
+      case 'pending_admin': return <Badge variant="info">Pending Admin</Badge>
+      case 'approved': return <Badge variant="success">Approved</Badge>
+      case 'exported': return <Badge variant="purple">Exported</Badge>
+      default: return <Badge>{status}</Badge>
+    }
+  }
+
+  if (!canSubmit) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-zinc-100">Submit Job</h1>
+          <p className="text-zinc-500">Submit new jobs for processing</p>
+        </div>
+        <Card>
+          <div className="text-center py-8">
+            <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Icons.X />
+            </div>
+            <h3 className="text-lg font-medium text-zinc-200 mb-2">Cannot Submit Jobs</h3>
+            <p className="text-zinc-500">
+              {isForeman
+                ? "Your supervisor hasn't been assigned a job number sequence yet. Contact your admin."
+                : "You haven't been assigned a job number sequence yet. Contact your admin."}
+            </p>
+          </div>
+        </Card>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-zinc-100">Submit Job</h1>
+        <p className="text-zinc-500">Submit new jobs for processing</p>
+      </div>
+
+      {/* Submission Form */}
+      <Card>
+        <h2 className="text-lg font-semibold text-zinc-100 mb-4">New Job Submission</h2>
+
+        {error && <p className="text-red-400 text-sm bg-red-900/20 border border-red-800 rounded-lg px-3 py-2 mb-4">{error}</p>}
+        {success && <p className="text-emerald-400 text-sm bg-emerald-900/20 border border-emerald-800 rounded-lg px-3 py-2 mb-4">{success}</p>}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <Select
+            label="Job Type"
+            value={formData.job_type}
+            onChange={(e) => setFormData({ ...formData, job_type: e.target.value })}
+            options={JOB_TYPES}
+          />
+
+          {isAdmin && (
+            <Select
+              label="Sequence"
+              value={selectedSequenceId}
+              onChange={(e) => setSelectedSequenceId(e.target.value)}
+              options={[
+                { value: '', label: 'Select sequence...' },
+                ...jobSequences.map(s => ({ value: s.id, label: s.prefix }))
+              ]}
+            />
+          )}
+
+          <Input
+            label="Address"
+            value={formData.address}
+            onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+            placeholder="123 Main St, City, TX"
+            required
+          />
+
+          {formData.address && (
+            <p className="text-sm text-zinc-500">
+              Will export as: <span className="text-amber-400">{getAddressWithPrefix(formData.job_type, formData.address)}</span>
+            </p>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Input
+              label="FCC (optional)"
+              value={formData.fcc}
+              onChange={(e) => setFormData({ ...formData, fcc: e.target.value })}
+              placeholder="FCC"
+            />
+            <Input
+              label="Leak # (optional)"
+              value={formData.leak_number}
+              onChange={(e) => setFormData({ ...formData, leak_number: e.target.value })}
+              placeholder="Leak number"
+            />
+            <Input
+              label="Project # (optional)"
+              value={formData.project_number}
+              onChange={(e) => setFormData({ ...formData, project_number: e.target.value })}
+              placeholder="Project number"
+            />
+          </div>
+
+          <div className="pt-4">
+            <Button type="submit" loading={loading} disabled={!formData.address.trim() || (isAdmin && !selectedSequenceId)}>
+              <span className="flex items-center gap-2"><Icons.Plus /> Submit Job</span>
+            </Button>
+          </div>
+        </form>
+      </Card>
+
+      {/* My Submissions History */}
+      <Card>
+        <h2 className="text-lg font-semibold text-zinc-100 mb-4">My Submissions</h2>
+        <div className="space-y-3">
+          {mySubmissions.map(job => (
+            <div key={job.id} className="p-4 bg-zinc-800/50 rounded-lg">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Badge variant={job.job_type === 'regular_leak' ? 'default' : 'info'}>{getJobTypeLabel(job.job_type)}</Badge>
+                    {getStatusBadge(job.status)}
+                  </div>
+                  <p className="font-medium text-zinc-200">{getAddressWithPrefix(job.job_type, job.address)}</p>
+                  <div className="flex gap-4 mt-1 text-sm text-zinc-500">
+                    {job.fcc && <span>FCC: {job.fcc}</span>}
+                    {job.leak_number && <span>Leak #: {job.leak_number}</span>}
+                    {job.project_number && <span>Project #: {job.project_number}</span>}
+                  </div>
+                  {job.job_number && (
+                    <p className="text-sm text-emerald-400 mt-1">Job #: {job.job_number}</p>
+                  )}
+                </div>
+                <span className="text-xs text-zinc-500">{new Date(job.created_at).toLocaleDateString()}</span>
+              </div>
+            </div>
+          ))}
+          {mySubmissions.length === 0 && (
+            <p className="text-zinc-500 text-center py-4">No submissions yet</p>
+          )}
+        </div>
+      </Card>
+    </div>
+  )
+}
+
+// =============================================
+// SUPERVISOR JOB REVIEW VIEW
+// =============================================
+
+const SupervisorJobReviewView = ({ profile, crews, jobSubmissions, profiles, onRefresh, logActivity }) => {
+  const [editingJob, setEditingJob] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  // Get crews supervised by this supervisor
+  const supervisedCrews = crews.filter(c => c.supervisor_id === profile.id)
+  const foremanUserIds = supervisedCrews.map(c => c.foreman_user_id).filter(Boolean)
+
+  // Get pending jobs from foremen
+  const pendingJobs = jobSubmissions.filter(j =>
+    j.status === 'pending_supervisor' && foremanUserIds.includes(j.submitted_by)
+  )
+
+  const getSubmitterName = (submittedBy) => {
+    const p = profiles.find(pr => pr.id === submittedBy)
+    return p?.name || 'Unknown'
+  }
+
+  const handleApprove = async (job) => {
+    setLoading(true)
+    const { error } = await supabase
+      .from('job_submissions')
+      .update({
+        status: 'pending_admin',
+        supervisor_reviewed_by: profile.id,
+        supervisor_reviewed_at: new Date().toISOString(),
+      })
+      .eq('id', job.id)
+
+    if (!error) {
+      if (logActivity) {
+        await logActivity('approved (supervisor)', 'job_submission', job.id, job.address)
+      }
+      onRefresh()
+    }
+    setLoading(false)
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editingJob) return
+    setLoading(true)
+
+    const { error } = await supabase
+      .from('job_submissions')
+      .update({
+        job_type: editingJob.job_type,
+        address: editingJob.address,
+        fcc: editingJob.fcc || null,
+        leak_number: editingJob.leak_number || null,
+        project_number: editingJob.project_number || null,
+      })
+      .eq('id', editingJob.id)
+
+    if (!error) {
+      if (logActivity) {
+        await logActivity('edited', 'job_submission', editingJob.id, editingJob.address)
+      }
+      setEditingJob(null)
+      onRefresh()
+    }
+    setLoading(false)
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-zinc-100">Review Foreman Jobs</h1>
+        <p className="text-zinc-500">Review and approve job submissions from your foremen</p>
+      </div>
+
+      {/* Pending Badge Count */}
+      {pendingJobs.length > 0 && (
+        <div className="bg-amber-900/20 border border-amber-700 rounded-lg p-4">
+          <p className="text-amber-400 font-medium">{pendingJobs.length} job(s) pending your review</p>
+        </div>
+      )}
+
+      <Card>
+        <h2 className="text-lg font-semibold text-zinc-100 mb-4">Pending Jobs</h2>
+        <div className="space-y-3">
+          {pendingJobs.map(job => (
+            <div key={job.id} className="p-4 bg-zinc-800/50 rounded-lg">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Badge variant={job.job_type === 'regular_leak' ? 'default' : 'info'}>{getJobTypeLabel(job.job_type)}</Badge>
+                    <span className="text-sm text-zinc-500">from {getSubmitterName(job.submitted_by)}</span>
+                  </div>
+                  <p className="font-medium text-zinc-200">{getAddressWithPrefix(job.job_type, job.address)}</p>
+                  <div className="flex gap-4 mt-1 text-sm text-zinc-500">
+                    {job.fcc && <span>FCC: {job.fcc}</span>}
+                    {job.leak_number && <span>Leak #: {job.leak_number}</span>}
+                    {job.project_number && <span>Project #: {job.project_number}</span>}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="ghost" onClick={() => setEditingJob(job)}>
+                    <Icons.Edit />
+                  </Button>
+                  <Button size="sm" variant="success" onClick={() => handleApprove(job)} loading={loading}>
+                    Approve
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))}
+          {pendingJobs.length === 0 && (
+            <p className="text-zinc-500 text-center py-4">No pending jobs from your foremen</p>
+          )}
+        </div>
+      </Card>
+
+      {/* Edit Job Modal */}
+      {editingJob && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-zinc-100">Edit Job</h2>
+              <button onClick={() => setEditingJob(null)} className="text-zinc-400 hover:text-zinc-200">
+                <Icons.X />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <Select
+                label="Job Type"
+                value={editingJob.job_type}
+                onChange={(e) => setEditingJob({ ...editingJob, job_type: e.target.value })}
+                options={JOB_TYPES}
+              />
+              <Input
+                label="Address"
+                value={editingJob.address}
+                onChange={(e) => setEditingJob({ ...editingJob, address: e.target.value })}
+              />
+              <Input
+                label="FCC"
+                value={editingJob.fcc || ''}
+                onChange={(e) => setEditingJob({ ...editingJob, fcc: e.target.value })}
+              />
+              <Input
+                label="Leak #"
+                value={editingJob.leak_number || ''}
+                onChange={(e) => setEditingJob({ ...editingJob, leak_number: e.target.value })}
+              />
+              <Input
+                label="Project #"
+                value={editingJob.project_number || ''}
+                onChange={(e) => setEditingJob({ ...editingJob, project_number: e.target.value })}
+              />
+
+              <div className="flex gap-3 pt-4">
+                <Button variant="secondary" onClick={() => setEditingJob(null)} className="flex-1">Cancel</Button>
+                <Button onClick={handleSaveEdit} loading={loading} className="flex-1">Save & Continue</Button>
+              </div>
+              <Button variant="success" onClick={() => { handleSaveEdit().then(() => handleApprove(editingJob)) }} loading={loading} className="w-full">
+                Save & Approve
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// =============================================
+// ADMIN JOB SUBMISSIONS VIEW
+// =============================================
+
+const AdminJobSubmissionsView = ({ jobSubmissions, profiles, jobSequences, sequenceAssignments, crews, onRefresh, logActivity }) => {
+  const [activeTab, setActiveTab] = useState('pending')
+  const [editingJob, setEditingJob] = useState(null)
+  const [selectedJobs, setSelectedJobs] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [showExportConfirm, setShowExportConfirm] = useState(false)
+
+  const getSubmitterName = (submittedBy) => profiles.find(p => p.id === submittedBy)?.name || 'Unknown'
+
+  const getSequenceForSubmission = (job) => {
+    if (job.sequence_id) {
+      return jobSequences.find(s => s.id === job.sequence_id)
+    }
+    // Get from submitter's supervisor
+    const submitter = profiles.find(p => p.id === job.submitted_by)
+    if (submitter?.role === 'supervisor') {
+      const assignment = sequenceAssignments.find(a => a.supervisor_id === job.submitted_by)
+      return jobSequences.find(s => s.id === assignment?.sequence_id)
+    }
+    if (submitter?.role === 'foreman') {
+      const foremanCrew = crews.find(c => c.foreman_user_id === job.submitted_by)
+      if (foremanCrew?.supervisor_id) {
+        const assignment = sequenceAssignments.find(a => a.supervisor_id === foremanCrew.supervisor_id)
+        return jobSequences.find(s => s.id === assignment?.sequence_id)
+      }
+    }
+    return null
+  }
+
+  const filteredJobs = jobSubmissions.filter(j => {
+    if (activeTab === 'all') return true
+    if (activeTab === 'pending') return j.status === 'pending_admin'
+    if (activeTab === 'approved') return j.status === 'approved'
+    if (activeTab === 'exported') return j.status === 'exported'
+    return true
+  })
+
+  const pendingCount = jobSubmissions.filter(j => j.status === 'pending_admin').length
+  const approvedCount = jobSubmissions.filter(j => j.status === 'approved').length
+
+  const handleApprove = async (job) => {
+    setLoading(true)
+    const sequence = getSequenceForSubmission(job)
+
+    if (!sequence) {
+      alert('Cannot approve: No sequence assigned for this submission')
+      setLoading(false)
+      return
+    }
+
+    // Call the atomic function
+    const { data, error } = await supabase.rpc('assign_job_number', {
+      p_submission_id: job.id,
+      p_sequence_id: sequence.id,
+    })
+
+    if (error) {
+      console.error('Error approving job:', error)
+      alert('Error approving job: ' + error.message)
+    } else {
+      if (logActivity) {
+        await logActivity('approved', 'job_submission', job.id, `${job.address} (${data})`)
+      }
+      onRefresh()
+    }
+    setLoading(false)
+  }
+
+  const handleBulkApprove = async () => {
+    if (selectedJobs.length === 0) return
+    setLoading(true)
+
+    const submissionIds = []
+    const sequenceIds = []
+
+    for (const jobId of selectedJobs) {
+      const job = jobSubmissions.find(j => j.id === jobId)
+      const sequence = getSequenceForSubmission(job)
+      if (job && sequence) {
+        submissionIds.push(jobId)
+        sequenceIds.push(sequence.id)
+      }
+    }
+
+    if (submissionIds.length === 0) {
+      alert('No valid jobs to approve (missing sequence assignments)')
+      setLoading(false)
+      return
+    }
+
+    const { data, error } = await supabase.rpc('bulk_approve_job_submissions', {
+      p_submission_ids: submissionIds,
+      p_sequence_ids: sequenceIds,
+    })
+
+    if (error) {
+      console.error('Error bulk approving:', error)
+      alert('Error: ' + error.message)
+    } else {
+      if (logActivity) {
+        await logActivity('bulk approved', 'job_submission', null, `${submissionIds.length} jobs`)
+      }
+      setSelectedJobs([])
+      onRefresh()
+    }
+    setLoading(false)
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editingJob) return
+    setLoading(true)
+
+    const { error } = await supabase
+      .from('job_submissions')
+      .update({
+        job_type: editingJob.job_type,
+        address: editingJob.address,
+        fcc: editingJob.fcc || null,
+        leak_number: editingJob.leak_number || null,
+        project_number: editingJob.project_number || null,
+      })
+      .eq('id', editingJob.id)
+
+    if (!error) {
+      if (logActivity) {
+        await logActivity('edited', 'job_submission', editingJob.id, editingJob.address)
+      }
+      setEditingJob(null)
+      onRefresh()
+    }
+    setLoading(false)
+  }
+
+  const handleExportCSV = () => {
+    const approvedJobs = jobSubmissions.filter(j => j.status === 'approved')
+    if (approvedJobs.length === 0) {
+      alert('No approved jobs to export')
+      return
+    }
+
+    // Build CSV
+    const headers = ['_fkCustomersID', 'customers::CustName', 'jobdesc', '__pkJobsID', 'Job Status', 'Contract', 'Contact', 'AFE']
+    const rows = approvedJobs.map(job => [
+      'ATMOS Distribution',
+      'Atmos Distribution',
+      getAddressWithPrefix(job.job_type, job.address),
+      job.job_number || '',
+      'Open',
+      job.project_number || '',
+      job.fcc || '',
+      job.leak_number || '',
+    ])
+
+    const csvContent = [headers, ...rows].map(row =>
+      row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')
+    ).join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `job_submissions_${new Date().toISOString().split('T')[0]}.csv`
+    link.click()
+
+    setShowExportConfirm(true)
+  }
+
+  const handleMarkExported = async () => {
+    setLoading(true)
+    const approvedJobs = jobSubmissions.filter(j => j.status === 'approved')
+
+    const { error } = await supabase
+      .from('job_submissions')
+      .update({ status: 'exported', exported_at: new Date().toISOString() })
+      .in('id', approvedJobs.map(j => j.id))
+
+    if (!error) {
+      if (logActivity) {
+        await logActivity('exported', 'job_submission', null, `${approvedJobs.length} jobs`)
+      }
+      onRefresh()
+    }
+    setShowExportConfirm(false)
+    setLoading(false)
+  }
+
+  const toggleJobSelection = (jobId) => {
+    setSelectedJobs(prev =>
+      prev.includes(jobId) ? prev.filter(id => id !== jobId) : [...prev, jobId]
+    )
+  }
+
+  const selectAllPending = () => {
+    const pendingIds = jobSubmissions.filter(j => j.status === 'pending_admin').map(j => j.id)
+    setSelectedJobs(prev =>
+      prev.length === pendingIds.length ? [] : pendingIds
+    )
+  }
+
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case 'pending_supervisor': return <Badge variant="warning">Pending Supervisor</Badge>
+      case 'pending_admin': return <Badge variant="info">Pending Admin</Badge>
+      case 'approved': return <Badge variant="success">Approved</Badge>
+      case 'exported': return <Badge variant="purple">Exported</Badge>
+      default: return <Badge>{status}</Badge>
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-zinc-100">Job Submissions</h1>
+          <p className="text-zinc-500">Review and approve job submissions</p>
+        </div>
+        {approvedCount > 0 && (
+          <Button onClick={handleExportCSV}>
+            <span className="flex items-center gap-2"><Icons.Download /> Export CSV ({approvedCount})</span>
+          </Button>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-2 flex-wrap">
+        <TabButton active={activeTab === 'pending'} onClick={() => setActiveTab('pending')} count={pendingCount}>
+          Pending
+        </TabButton>
+        <TabButton active={activeTab === 'approved'} onClick={() => setActiveTab('approved')} count={approvedCount}>
+          Approved
+        </TabButton>
+        <TabButton active={activeTab === 'exported'} onClick={() => setActiveTab('exported')}>
+          Exported
+        </TabButton>
+        <TabButton active={activeTab === 'all'} onClick={() => setActiveTab('all')}>
+          All
+        </TabButton>
+      </div>
+
+      {/* Bulk Actions */}
+      {activeTab === 'pending' && filteredJobs.length > 0 && (
+        <div className="flex items-center gap-4 p-4 bg-zinc-900/80 border border-zinc-800 rounded-lg">
+          <button
+            onClick={selectAllPending}
+            className="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-200"
+          >
+            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${selectedJobs.length === filteredJobs.length ? 'bg-amber-500 border-amber-500 text-zinc-900' : 'border-zinc-600'}`}>
+              {selectedJobs.length === filteredJobs.length && <Icons.Check />}
+            </div>
+            Select All
+          </button>
+          {selectedJobs.length > 0 && (
+            <Button size="sm" variant="success" onClick={handleBulkApprove} loading={loading}>
+              Approve Selected ({selectedJobs.length})
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* Job List */}
+      <Card>
+        <div className="space-y-3">
+          {filteredJobs.map(job => {
+            const sequence = getSequenceForSubmission(job)
+            return (
+              <div key={job.id} className="p-4 bg-zinc-800/50 rounded-lg">
+                <div className="flex items-start gap-3">
+                  {activeTab === 'pending' && (
+                    <button
+                      onClick={() => toggleJobSelection(job.id)}
+                      className={`mt-1 w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${selectedJobs.includes(job.id) ? 'bg-amber-500 border-amber-500 text-zinc-900' : 'border-zinc-600'}`}
+                    >
+                      {selectedJobs.includes(job.id) && <Icons.Check />}
+                    </button>
+                  )}
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <Badge variant={job.job_type === 'regular_leak' ? 'default' : 'info'}>{getJobTypeLabel(job.job_type)}</Badge>
+                      {getStatusBadge(job.status)}
+                      {sequence && <span className="text-xs text-zinc-500">Seq: {sequence.prefix}</span>}
+                    </div>
+                    <p className="font-medium text-zinc-200">{getAddressWithPrefix(job.job_type, job.address)}</p>
+                    <div className="flex gap-4 mt-1 text-sm text-zinc-500 flex-wrap">
+                      <span>By: {getSubmitterName(job.submitted_by)}</span>
+                      {job.fcc && <span>FCC: {job.fcc}</span>}
+                      {job.leak_number && <span>Leak #: {job.leak_number}</span>}
+                      {job.project_number && <span>Project #: {job.project_number}</span>}
+                    </div>
+                    {job.job_number && (
+                      <p className="text-sm text-emerald-400 mt-1">Job #: {job.job_number}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-zinc-500">{new Date(job.created_at).toLocaleDateString()}</span>
+                    <Button size="sm" variant="ghost" onClick={() => setEditingJob(job)}>
+                      <Icons.Edit />
+                    </Button>
+                    {job.status === 'pending_admin' && (
+                      <Button size="sm" variant="success" onClick={() => handleApprove(job)} loading={loading}>
+                        Approve
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+          {filteredJobs.length === 0 && (
+            <p className="text-zinc-500 text-center py-8">No jobs in this category</p>
+          )}
+        </div>
+      </Card>
+
+      {/* Edit Job Modal */}
+      {editingJob && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-zinc-100">Edit Job</h2>
+              <button onClick={() => setEditingJob(null)} className="text-zinc-400 hover:text-zinc-200">
+                <Icons.X />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <Select
+                label="Job Type"
+                value={editingJob.job_type}
+                onChange={(e) => setEditingJob({ ...editingJob, job_type: e.target.value })}
+                options={JOB_TYPES}
+              />
+              <Input
+                label="Address"
+                value={editingJob.address}
+                onChange={(e) => setEditingJob({ ...editingJob, address: e.target.value })}
+              />
+              <Input
+                label="FCC"
+                value={editingJob.fcc || ''}
+                onChange={(e) => setEditingJob({ ...editingJob, fcc: e.target.value })}
+              />
+              <Input
+                label="Leak #"
+                value={editingJob.leak_number || ''}
+                onChange={(e) => setEditingJob({ ...editingJob, leak_number: e.target.value })}
+              />
+              <Input
+                label="Project #"
+                value={editingJob.project_number || ''}
+                onChange={(e) => setEditingJob({ ...editingJob, project_number: e.target.value })}
+              />
+
+              <div className="flex gap-3 pt-4">
+                <Button variant="secondary" onClick={() => setEditingJob(null)} className="flex-1">Cancel</Button>
+                <Button onClick={handleSaveEdit} loading={loading} className="flex-1">Save Changes</Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Export Confirm Modal */}
+      {showExportConfirm && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Icons.CheckCircle />
+              </div>
+              <h2 className="text-xl font-bold text-zinc-100 mb-2">CSV Downloaded</h2>
+              <p className="text-zinc-400 mb-6">Would you like to mark these jobs as exported?</p>
+              <div className="flex gap-3">
+                <Button variant="secondary" onClick={() => setShowExportConfirm(false)} className="flex-1">Not Yet</Button>
+                <Button variant="success" onClick={handleMarkExported} loading={loading} className="flex-1">Mark as Exported</Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// =============================================
 // MAIN APP
 // =============================================
 
@@ -4008,6 +5078,9 @@ export default function App() {
   const [leakReports, setLeakReports] = useState([])
   const [profiles, setProfiles] = useState([])
   const [activityLogs, setActivityLogs] = useState([])
+  const [jobSubmissions, setJobSubmissions] = useState([])
+  const [jobSequences, setJobSequences] = useState([])
+  const [sequenceAssignments, setSequenceAssignments] = useState([])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -4031,13 +5104,16 @@ export default function App() {
   }
 
   const fetchAllData = async () => {
-    const [empRes, crewRes, equipRes, reportRes, profRes, logsRes] = await Promise.all([
+    const [empRes, crewRes, equipRes, reportRes, profRes, logsRes, jobSubRes, seqRes, seqAssignRes] = await Promise.all([
       supabase.from('employees').select('*').order('name'),
       supabase.from('crews').select('*, crew_members(*)').order('name'),
       supabase.from('equipment').select('*').order('created_at', { ascending: false }),
       supabase.from('leak_reports').select('*').order('created_at', { ascending: false }),
       supabase.from('profiles').select('*').order('name'),
       supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(100),
+      supabase.from('job_submissions').select('*').order('created_at', { ascending: false }),
+      supabase.from('job_number_sequences').select('*').order('prefix'),
+      supabase.from('supervisor_sequence_assignments').select('*'),
     ])
     setEmployees(empRes.data || [])
     setCrews(crewRes.data || [])
@@ -4045,6 +5121,9 @@ export default function App() {
     setLeakReports(reportRes.data || [])
     setProfiles(profRes.data || [])
     setActivityLogs(logsRes.data || [])
+    setJobSubmissions(jobSubRes.data || [])
+    setJobSequences(seqRes.data || [])
+    setSequenceAssignments(seqAssignRes.data || [])
   }
 
   const logActivity = async (action, entityType, entityId, entityName, details = null) => {
@@ -4075,7 +5154,7 @@ export default function App() {
 
   const renderView = () => {
     switch (currentView) {
-      case 'dashboard': return <Dashboard profile={profile} crews={crews} employees={employees} equipment={equipment} leakReports={leakReports} activityLogs={activityLogs} />
+      case 'dashboard': return <Dashboard profile={profile} crews={crews} employees={employees} equipment={equipment} leakReports={leakReports} activityLogs={activityLogs} jobSubmissions={jobSubmissions} sequenceAssignments={sequenceAssignments} jobSequences={jobSequences} />
       case 'users': return <UsersManagementView profiles={profiles} crews={crews} employees={employees} onRefresh={fetchAllData} logActivity={logActivity} />
       case 'employees': return <EmployeesView employees={employees} crews={crews} onRefresh={fetchAllData} readOnly={profile?.role !== 'admin'} logActivity={logActivity} />
       case 'crews': case 'my-crew': return <CrewsView crews={crews} employees={employees} profiles={profiles} profile={profile} onRefresh={fetchAllData} equipment={equipment} leakReports={leakReports} logActivity={logActivity} />
@@ -4083,7 +5162,11 @@ export default function App() {
       case 'leak-reports': return <AdminLeakReportsView leakReports={leakReports} crews={crews} profiles={profiles} onRefresh={fetchAllData} employees={employees} logActivity={logActivity} />
       case 'my-leak-reports': return <ForemanLeakReportsView leakReports={leakReports} crews={crews} profile={profile} onRefresh={fetchAllData} logActivity={logActivity} />
       case 'review-reports': return <SupervisorReviewView leakReports={leakReports} crews={crews} profile={profile} onRefresh={fetchAllData} logActivity={logActivity} />
-      default: return <Dashboard profile={profile} crews={crews} employees={employees} equipment={equipment} leakReports={leakReports} activityLogs={activityLogs} />
+      case 'job-submissions': return <AdminJobSubmissionsView jobSubmissions={jobSubmissions} profiles={profiles} jobSequences={jobSequences} sequenceAssignments={sequenceAssignments} crews={crews} onRefresh={fetchAllData} logActivity={logActivity} />
+      case 'job-settings': return <JobSettingsView jobSequences={jobSequences} sequenceAssignments={sequenceAssignments} profiles={profiles} onRefresh={fetchAllData} logActivity={logActivity} />
+      case 'submit-job': return <SubmitJobView profile={profile} crews={crews} jobSubmissions={jobSubmissions} jobSequences={jobSequences} sequenceAssignments={sequenceAssignments} onRefresh={fetchAllData} logActivity={logActivity} />
+      case 'review-jobs': return <SupervisorJobReviewView profile={profile} crews={crews} jobSubmissions={jobSubmissions} profiles={profiles} onRefresh={fetchAllData} logActivity={logActivity} />
+      default: return <Dashboard profile={profile} crews={crews} employees={employees} equipment={equipment} leakReports={leakReports} activityLogs={activityLogs} jobSubmissions={jobSubmissions} sequenceAssignments={sequenceAssignments} jobSequences={jobSequences} />
     }
   }
 

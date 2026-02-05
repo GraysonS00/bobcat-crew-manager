@@ -309,3 +309,64 @@ The Admin Employees view includes a search bar for quickly finding employees:
 - `searchQuery` state in EmployeesView component
 - `filteredEmployees` computed array filters by search query
 - Case-insensitive partial matching on all searchable fields
+
+### Job Submissions Feature
+
+A workflow for submitting jobs that need to be exported to FileMaker. Replaces texts/emails/forms with an in-app submission system.
+
+**Workflow:**
+```
+Foreman submits    → Supervisor reviews/edits → Admin approves (job # assigned) → Export CSV
+Supervisor submits → Admin approves (job # assigned) → Export CSV
+Admin submits      → Admin approves (job # assigned) → Export CSV
+```
+
+**Database Tables (job-submissions-migration.sql):**
+- `job_submissions` - Main submissions table with status, job type, address, FCC, leak #, project #
+- `job_number_sequences` - Tracks D01, D02, D03, D04 prefixes and their current counts
+- `supervisor_sequence_assignments` - Maps supervisors to their job number sequence
+
+**Statuses:**
+- `pending_supervisor` - Foreman submitted, waiting for supervisor review
+- `pending_admin` - Ready for admin approval
+- `approved` - Admin approved, job number assigned
+- `exported` - Included in CSV export
+
+**Job Number Format:** `01-D0X-XXXXX` (e.g., `01-D02-00488`)
+- Each supervisor is assigned a sequence (D01, D02, etc.)
+- On approval, the sequence counter increments atomically
+- Uses PostgreSQL function `assign_job_number()` with row locking
+
+**Job Types and CSV Prefixes:**
+| Job Type | Display Label | Address Prefix for CSV |
+|----------|---------------|------------------------|
+| `regular_leak` | Regular Leak | (none) |
+| `grade_1` | Grade 1 | `CO - Grade 1 - ` |
+| `copper_service` | Copper Service | `CSVP - ` |
+| `per_foot` | Per Foot | `Per Foot - ` |
+| `bid` | BID | `BID - ` |
+
+**CSV Export Columns (FileMaker compatible):**
+1. `_fkCustomersID` - Static: "ATMOS Distribution"
+2. `customers::CustName` - Static: "Atmos Distribution"
+3. `jobdesc` - Address with job type prefix applied
+4. `__pkJobsID` - Auto-assigned job number
+5. `Job Status` - Static: "Open"
+6. `Contract` - Project # (or blank)
+7. `Contact` - FCC (or blank)
+8. `AFE` - Leak # (or blank)
+
+**Views:**
+- `SubmitJobView` - Foremen/Supervisors/Admins submit new jobs
+- `SupervisorJobReviewView` - Supervisors review foreman submissions
+- `AdminJobSubmissionsView` - Admins approve jobs, bulk approve, export CSV
+- `JobSettingsView` - Admins manage sequences and supervisor assignments
+
+**Form Visibility:**
+- Foremen only see the form if their crew's supervisor has a sequence assigned
+- Supervisors only see the form if they have a sequence assigned
+- Admins always see the form (they pick sequence from dropdown)
+
+**Dashboard Notifications:**
+- Supervisors see pending foreman job count
+- Admins see pending admin approval count
