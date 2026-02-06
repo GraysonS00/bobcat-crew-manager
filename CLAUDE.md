@@ -190,31 +190,30 @@ The Supervisor Dashboard displays a "Foreman Activity" feed showing actions take
 - `foremanActivityLogs` computed from `activityLogs` filtered by foreman user IDs
 
 ### PDF Export Functionality
-Uses **pdf-lib** library to fill a pre-made PDF template with report data.
-
-**Key files:**
-- `createPdfTemplate.js` - One-time script to generate fillable PDF template from the original "Leak Report Form.pdf"
-- `public/LeakReportTemplate.pdf` - The fillable template served by the web app
-- `LeakReportTemplate.pdf` - Copy in root (generated output)
+Uses **pdf-lib** library to generate PDFs from scratch (no template file needed).
 
 **How it works:**
-1. `loadPdfTemplate()` fetches and caches the template PDF
-2. `generateLeakReportPDF()` loads the template, fills all form fields (text and checkboxes), flattens the form, and returns PDF bytes
-3. `exportReportsAsZip()` generates PDFs for filtered reports and bundles them into a downloadable ZIP file
+1. `generateLeakReportPDF(report, crew, supervisorProfile, foremanEmployee)` creates a new PDF document and draws all content using pdf-lib's drawing APIs
+2. `exportReportsAsZip()` generates PDFs for filtered reports and bundles them into a downloadable ZIP file
+
+**PDF generation details:**
+- Letter size (612x792), 30pt margins, Helvetica + Helvetica-Bold standard fonts
+- Layout: Title → header rows (date, project #, leak #, foreman, supervisor, address) → Job Type section → two-column layout (left: Leak Details, Replacements, Additional Details; right: Downtime, Adders, Welder, Bore) → full-width Crew Times & Completion, FCC (`report.fcc_name`), word-wrapped Notes
+- Helper closures: `drawSectionHeader`, `drawLabelValue`, `drawYesNo`, `drawCheckItem`, `drawLine`, `wrapText`, `truncText`
+- Section headers: light gray background band with bold text
+- Checkboxes: filled dark square (checked) / outlined empty square (unchecked) via `drawRectangle`
+- Two-column section uses `yLeft`/`yRight` cursors with vertical divider line, resumes at `Math.min(yLeft, yRight)`
+- All 50+ report fields are rendered (same fields as the old template approach)
 
 **Export options:**
 - "Export Current View" button exports reports matching current supervisor/week filters
 - Export modal allows filtering by date range, supervisors, and classification type
 
-**PDF field naming convention** (in createPdfTemplate.js):
-- Text fields: `date`, `foreman`, `supervisor`, `project_number`, `leak_number`, `address`, `*_qty`, `downtime_*_start/end`, `bore_*`, `crew_*_time`, `fcc_name`, `notes`
-- Checkboxes: `job_type_*`, `leak_*`, `pipe_type_*`, `*_yes`, `*_no`, `welder_*`, `bore_*`, etc.
-
-To adjust field positions, edit coordinates in `createPdfTemplate.js` and regenerate:
-```bash
-node createPdfTemplate.js
-cp LeakReportTemplate.pdf public/
-```
+**Legacy files (no longer used, can be deleted):**
+- `createPdfTemplate.js` - Was used to generate the old fillable template
+- `public/LeakReportTemplate.pdf` - Old fillable template
+- `LeakReportTemplate.pdf` - Copy in root
+- `Leak Report Form.pdf` - Original source PDF
 
 ### Equipment View (Role-Based Navigation)
 
