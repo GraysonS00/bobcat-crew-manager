@@ -4539,7 +4539,10 @@ const SupervisorJobReviewView = ({ profile, crews, jobSubmissions, profiles, onR
       })
       .eq('id', job.id)
 
-    if (!error) {
+    if (error) {
+      console.error('Error approving job:', error)
+      alert('Error approving job: ' + error.message)
+    } else {
       if (logActivity) {
         await logActivity('approved (supervisor)', 'job_submission', job.id, job.address)
       }
