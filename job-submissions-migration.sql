@@ -298,3 +298,53 @@ RETURNS UUID AS $$
     WHERE c.foreman_user_id = p_foreman_user_id
     LIMIT 1;
 $$ LANGUAGE SQL SECURITY DEFINER;
+
+-- =============================================
+-- FUNCTION: Supervisor approve job (bypasses RLS)
+-- =============================================
+
+CREATE OR REPLACE FUNCTION public.supervisor_approve_job(p_job_id UUID)
+RETURNS BOOLEAN AS $$
+DECLARE
+    v_job RECORD;
+    v_is_valid BOOLEAN := FALSE;
+BEGIN
+    -- Get the job
+    SELECT * INTO v_job FROM public.job_submissions WHERE id = p_job_id;
+
+    IF v_job IS NULL THEN
+        RAISE EXCEPTION 'Job not found';
+    END IF;
+
+    -- Check if current user is a supervisor
+    IF get_user_role() != 'supervisor' THEN
+        RAISE EXCEPTION 'Only supervisors can use this function';
+    END IF;
+
+    -- Check if job is pending supervisor review
+    IF v_job.status != 'pending_supervisor' THEN
+        RAISE EXCEPTION 'Job is not pending supervisor review';
+    END IF;
+
+    -- Check if the submitter is a foreman on one of this supervisor's crews
+    SELECT EXISTS (
+        SELECT 1 FROM public.crews c
+        WHERE c.supervisor_id = auth.uid()
+        AND c.foreman_user_id = v_job.submitted_by
+    ) INTO v_is_valid;
+
+    IF NOT v_is_valid THEN
+        RAISE EXCEPTION 'You can only approve jobs from your foremen';
+    END IF;
+
+    -- Do the update
+    UPDATE public.job_submissions
+    SET status = 'pending_admin',
+        supervisor_reviewed_by = auth.uid(),
+        supervisor_reviewed_at = NOW(),
+        updated_at = NOW()
+    WHERE id = p_job_id;
+
+    RETURN TRUE;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
