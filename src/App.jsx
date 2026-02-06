@@ -1,6 +1,6 @@
 import React, { useState, useEffect, createContext, useContext } from 'react'
 import { supabase } from './supabaseClient'
-import { PDFDocument } from 'pdf-lib'
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import JSZip from 'jszip'
 
 // =============================================
@@ -3376,38 +3376,98 @@ const SupervisorReviewView = ({ leakReports, crews, profile, onRefresh, logActiv
 // PDF GENERATION HELPERS
 // =============================================
 
-// Cache for the PDF template
-let pdfTemplateCache = null
-
-const loadPdfTemplate = async () => {
-  if (pdfTemplateCache) return pdfTemplateCache
-  const response = await fetch('/LeakReportTemplate.pdf')
-  const arrayBuffer = await response.arrayBuffer()
-  pdfTemplateCache = arrayBuffer
-  return arrayBuffer
-}
-
 const generateLeakReportPDF = async (report, crew, supervisorProfile, foremanEmployee) => {
-  // Load the template
-  const templateBytes = await loadPdfTemplate()
-  const pdfDoc = await PDFDocument.load(templateBytes)
-  const form = pdfDoc.getForm()
+  const pdfDoc = await PDFDocument.create()
+  const page = pdfDoc.addPage([612, 792]) // Letter size
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica)
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
 
-  // Helper to safely set text field
-  const setText = (fieldName, value) => {
-    try {
-      const field = form.getTextField(fieldName)
-      field.setText(value || '')
-    } catch (e) { /* Field doesn't exist */ }
+  const margin = 30
+  const pageWidth = 612
+  const contentWidth = pageWidth - margin * 2
+  const colMid = margin + contentWidth / 2
+  const colWidth = contentWidth / 2 - 6
+  const black = rgb(0, 0, 0)
+  const gray = rgb(0.4, 0.4, 0.4)
+  const lightGray = rgb(0.92, 0.92, 0.92)
+  const white = rgb(1, 1, 1)
+  const lineGray = rgb(0.8, 0.8, 0.8)
+
+  // Helper: draw section header with gray background band
+  const drawSectionHeader = (text, y, colX, colW) => {
+    const sx = colX !== undefined ? colX : margin
+    const sw = colW !== undefined ? colW : contentWidth
+    page.drawRectangle({ x: sx, y: y - 3, width: sw, height: 14, color: lightGray })
+    page.drawText(text, { x: sx + 4, y: y, font: fontBold, size: 9, color: black })
+    return y - 18
   }
 
-  // Helper to safely set checkbox
-  const setCheck = (fieldName, checked) => {
-    try {
-      const field = form.getCheckBox(fieldName)
-      if (checked) field.check()
-      else field.uncheck()
-    } catch (e) { /* Field doesn't exist */ }
+  // Helper: draw label + value pair
+  const drawLabelValue = (label, value, x, y, maxWidth) => {
+    const labelWidth = font.widthOfTextAtSize(label, 8)
+    page.drawText(label, { x, y, font, size: 8, color: gray })
+    const val = (value ?? '').toString()
+    if (val) {
+      const availWidth = maxWidth ? maxWidth - labelWidth - 2 : 200
+      const truncVal = truncText(val, fontBold, 9, availWidth)
+      page.drawText(truncVal, { x: x + labelWidth + 2, y, font: fontBold, size: 9, color: black })
+    }
+  }
+
+  // Helper: truncate text to fit width
+  const truncText = (text, f, size, maxW) => {
+    if (f.widthOfTextAtSize(text, size) <= maxW) return text
+    let t = text
+    while (t.length > 0 && f.widthOfTextAtSize(t + '...', size) > maxW) t = t.slice(0, -1)
+    return t + '...'
+  }
+
+  // Helper: draw Yes / No / "--" for booleans
+  const drawYesNo = (label, value, x, y) => {
+    const labelWidth = font.widthOfTextAtSize(label, 8)
+    page.drawText(label, { x, y, font, size: 8, color: gray })
+    const display = value === true ? 'Yes' : value === false ? 'No' : '--'
+    const valColor = value === true ? rgb(0.1, 0.6, 0.2) : value === false ? rgb(0.7, 0.1, 0.1) : gray
+    page.drawText(display, { x: x + labelWidth + 2, y, font: fontBold, size: 9, color: valColor })
+  }
+
+  // Helper: draw checkbox item with optional qty
+  const drawCheckItem = (label, checked, x, y, qty) => {
+    const boxSize = 7
+    if (checked) {
+      page.drawRectangle({ x, y: y - 1, width: boxSize, height: boxSize, color: rgb(0.15, 0.15, 0.15) })
+    } else {
+      page.drawRectangle({ x, y: y - 1, width: boxSize, height: boxSize, borderColor: black, borderWidth: 0.5, color: white })
+    }
+    page.drawText(label, { x: x + boxSize + 3, y, font, size: 8, color: black })
+    if (qty !== undefined && qty !== null && qty !== '') {
+      const labelW = font.widthOfTextAtSize(label, 8)
+      page.drawText(`  Qty: ${qty}`, { x: x + boxSize + 3 + labelW, y, font, size: 8, color: gray })
+    }
+  }
+
+  // Helper: draw thin horizontal line
+  const drawLine = (y) => {
+    page.drawLine({ start: { x: margin, y }, end: { x: pageWidth - margin, y }, thickness: 0.5, color: lineGray })
+  }
+
+  // Helper: word-wrap text
+  const wrapText = (text, maxWidth, f, size) => {
+    if (!text) return []
+    const words = text.split(' ')
+    const lines = []
+    let currentLine = ''
+    for (const word of words) {
+      const testLine = currentLine ? currentLine + ' ' + word : word
+      if (f.widthOfTextAtSize(testLine, size) > maxWidth) {
+        if (currentLine) lines.push(currentLine)
+        currentLine = word
+      } else {
+        currentLine = testLine
+      }
+    }
+    if (currentLine) lines.push(currentLine)
+    return lines
   }
 
   // Parse downtime periods
@@ -3415,148 +3475,230 @@ const generateLeakReportPDF = async (report, crew, supervisorProfile, foremanEmp
     ? JSON.parse(report.downtime_periods || '[]')
     : (report.downtime_periods || [])
 
-  // ============================================
-  // FILL TEXT FIELDS
-  // ============================================
-
-  setText('date', report.date || '')
-  setText('foreman', foremanEmployee?.name || report.supervisor || '')
-  setText('supervisor', supervisorProfile?.name || '')
-  setText('project_number', report.project_number || '')
-  setText('leak_number', report.leak_number || '')
-  setText('address', report.address || '')
-
-  // Grade 1 times
-  setText('time_called_off_to_grade_1', report.time_called_off_to_grade_1 || '')
-  setText('time_leak_turned_grade_1', report.time_leak_turned_grade_1 || '')
-
-  // Replacement quantities
-  setText('short_side_qty', report.short_side_qty?.toString() || '')
-  setText('long_side_qty', report.long_side_qty?.toString() || '')
-  setText('insert_qty', report.insert_qty?.toString() || '')
-  setText('retirement_qty', report.retirement_qty?.toString() || '')
-
-  // Downtime periods
-  if (downtimePeriods[0]) {
-    setText('downtime_1_start', downtimePeriods[0].start || '')
-    setText('downtime_1_end', downtimePeriods[0].end || '')
-  }
-  if (downtimePeriods[1]) {
-    setText('downtime_2_start', downtimePeriods[1].start || '')
-    setText('downtime_2_end', downtimePeriods[1].end || '')
-  }
-  if (downtimePeriods[2]) {
-    setText('downtime_3_start', downtimePeriods[2].start || '')
-    setText('downtime_3_end', downtimePeriods[2].end || '')
-  }
-
-  // Adder quantities
-  setText('no_blow_kit_qty', report.no_blow_kit_qty?.toString() || '')
-  setText('short_stop_2_4_qty', report.short_stop_2_4_qty?.toString() || '')
-  setText('short_stop_6_plus_qty', report.short_stop_6_plus_qty?.toString() || '')
-
-  // Bore details
-  setText('bore_size_inches', report.bore_size_inches?.toString() || '')
-  setText('bore_footage', report.bore_footage?.toString() || '')
-
-  // Crew times
-  setText('crew_start_time', report.crew_start_time || '')
-  setText('crew_end_time', report.crew_end_time || '')
-
-  // FCC and Notes
-  setText('fcc_name', foremanEmployee?.name || '')
+  // Build notes text
   const notesText = [report.notes, report.rate_type === 'both' && report.rate_type_notes ? `Classification: ${report.rate_type_notes}` : ''].filter(Boolean).join(' | ')
-  setText('notes', notesText)
 
   // ============================================
-  // FILL CHECKBOXES
+  // DRAW PDF CONTENT
   // ============================================
 
-  // Job Type
-  setCheck('job_type_regular_leak', report.job_type === 'regular_leak')
-  setCheck('job_type_grade_1', report.job_type === 'grade_1')
-  setCheck('job_type_laying_sod', report.job_type === 'laying_sod_cleanup')
+  let y = 762 // Start near top
 
-  // Grade 1 checkboxes
-  setCheck('crew_called_off_to_grade_1', report.crew_called_off_to_grade_1)
-  setCheck('leak_turned_into_grade_1', report.leak_turned_into_grade_1)
+  // Title
+  const titleText = 'LEAK REPORT'
+  const titleWidth = fontBold.widthOfTextAtSize(titleText, 13)
+  page.drawText(titleText, { x: (pageWidth - titleWidth) / 2, y, font: fontBold, size: 13, color: black })
+  y -= 22
 
-  // Classification (Superintendent)
-  setCheck('rate_type_all_hourly', report.rate_type === 'all_hourly')
-  setCheck('rate_type_unit_rates', report.rate_type === 'unit_rates')
-  setCheck('rate_type_both', report.rate_type === 'both')
+  drawLine(y + 6)
+  y -= 4
 
-  // Leak Located
-  setCheck('leak_located_yes', report.leak_located === true)
-  setCheck('leak_located_no', report.leak_located === false)
+  // Row 1: Date, Project #, Leak #
+  drawLabelValue('Date: ', report.date || '', margin, y, 180)
+  drawLabelValue('Project #: ', report.project_number || '', margin + 180, y, 170)
+  drawLabelValue('Leak #: ', report.leak_number || '', margin + 360, y, 180)
+  y -= 16
 
-  // Leak located before arrival
-  setCheck('leak_located_before_arrival_yes', report.leak_located_before_arrival === true)
-  setCheck('leak_located_before_arrival_no', report.leak_located_before_arrival === false)
+  // Row 2: Foreman, Supervisor
+  drawLabelValue('Foreman: ', foremanEmployee?.name || '', margin, y, contentWidth / 2)
+  drawLabelValue('Supervisor: ', supervisorProfile?.name || '', colMid, y, colWidth)
+  y -= 16
 
-  // Over 25 min
-  setCheck('over_25_min_yes', report.took_over_25_min_to_locate === true)
-  setCheck('over_25_min_no', report.took_over_25_min_to_locate === false)
+  // Row 3: Address
+  drawLabelValue('Address: ', report.address || '', margin, y, contentWidth)
+  y -= 18
 
-  // Type of Leak
-  setCheck('leak_type_main', report.leak_type === 'main')
-  setCheck('leak_type_service', report.leak_type === 'service')
+  // ============================================
+  // JOB TYPE SECTION
+  // ============================================
+  y = drawSectionHeader('JOB TYPE', y)
 
-  // Pipe Type
-  setCheck('pipe_type_steel', report.pipe_type === 'steel')
-  setCheck('pipe_type_poly', report.pipe_type === 'poly')
+  drawCheckItem('Regular Leak', report.job_type === 'regular_leak', margin + 4, y)
+  drawCheckItem('Grade 1', report.job_type === 'grade_1', margin + 120, y)
+  drawCheckItem('Laying Sod / Cleanup', report.job_type === 'laying_sod_cleanup', margin + 220, y)
+  y -= 14
+
+  // Grade 1 details
+  if (report.job_type === 'grade_1' || report.crew_called_off_to_grade_1 || report.leak_turned_into_grade_1) {
+    drawCheckItem('Crew called off to Grade 1', report.crew_called_off_to_grade_1, margin + 10, y)
+    if (report.time_called_off_to_grade_1) {
+      drawLabelValue('  Time: ', report.time_called_off_to_grade_1, margin + 200, y, 120)
+    }
+    y -= 13
+    drawCheckItem('Leak turned into Grade 1', report.leak_turned_into_grade_1, margin + 10, y)
+    if (report.time_leak_turned_grade_1) {
+      drawLabelValue('  Time: ', report.time_leak_turned_grade_1, margin + 200, y, 120)
+    }
+    y -= 14
+  }
+
+  // Classification
+  page.drawText('Classification:', { x: margin + 4, y, font, size: 8, color: gray })
+  drawCheckItem('All Hourly', report.rate_type === 'all_hourly', margin + 90, y)
+  drawCheckItem('Unit Rates', report.rate_type === 'unit_rates', margin + 180, y)
+  drawCheckItem('Both', report.rate_type === 'both', margin + 270, y)
+  y -= 16
+
+  // ============================================
+  // TWO-COLUMN LAYOUT
+  // ============================================
+  drawLine(y + 6)
+  y -= 2
+  const twoColStartY = y
+
+  // Draw vertical divider line later after we know the extent
+  let yLeft = y
+  let yRight = y
+
+  // ---- LEFT COLUMN ----
+
+  // Leak Details
+  yLeft = drawSectionHeader('LEAK DETAILS', yLeft, margin, colWidth)
+
+  drawYesNo('Located: ', report.leak_located, margin + 4, yLeft)
+  yLeft -= 13
+  drawYesNo('Located Before Arrival: ', report.leak_located_before_arrival, margin + 4, yLeft)
+  yLeft -= 13
+  drawYesNo('Over 25 Min to Locate: ', report.took_over_25_min_to_locate, margin + 4, yLeft)
+  yLeft -= 13
+
+  page.drawText('Type:', { x: margin + 4, y: yLeft, font, size: 8, color: gray })
+  drawCheckItem('Main', report.leak_type === 'main', margin + 40, yLeft)
+  drawCheckItem('Service', report.leak_type === 'service', margin + 100, yLeft)
+  yLeft -= 13
+
+  page.drawText('Pipe:', { x: margin + 4, y: yLeft, font, size: 8, color: gray })
+  drawCheckItem('Steel', report.pipe_type === 'steel', margin + 40, yLeft)
+  drawCheckItem('Poly', report.pipe_type === 'poly', margin + 100, yLeft)
+  yLeft -= 18
 
   // Replacements
-  setCheck('short_side', report.short_side)
-  setCheck('long_side', report.long_side)
-  setCheck('insert_replacement', report.insert_replacement)
-  setCheck('retirement', report.retirement)
+  yLeft = drawSectionHeader('REPLACEMENTS', yLeft, margin, colWidth)
 
-  // Yes/No questions
-  setCheck('section_out_main_yes', report.section_out_main === true)
-  setCheck('section_out_main_no', report.section_out_main === false)
-  setCheck('excessive_haul_off_yes', report.excessive_haul_off === true)
-  setCheck('excessive_haul_off_no', report.excessive_haul_off === false)
-  setCheck('excessive_restoration_yes', report.excessive_restoration === true)
-  setCheck('excessive_restoration_no', report.excessive_restoration === false)
-  setCheck('downtown_paving_yes', report.downtown_extensive_paving === true)
-  setCheck('downtown_paving_no', report.downtown_extensive_paving === false)
-  setCheck('traffic_control_yes', report.increased_traffic_control === true)
-  setCheck('traffic_control_no', report.increased_traffic_control === false)
-  setCheck('rock_in_bellhole_yes', report.rock_in_bellhole === true)
-  setCheck('rock_in_bellhole_no', report.rock_in_bellhole === false)
-  setCheck('street_plates_yes', report.street_plates_used === true)
-  setCheck('street_plates_no', report.street_plates_used === false)
-  setCheck('vac_truck_yes', report.vac_truck_used === true)
-  setCheck('vac_truck_no', report.vac_truck_used === false)
+  drawCheckItem('Short Side', report.short_side, margin + 4, yLeft, report.short_side_qty)
+  yLeft -= 13
+  drawCheckItem('Long Side', report.long_side, margin + 4, yLeft, report.long_side_qty)
+  yLeft -= 13
+  drawCheckItem('Insert', report.insert_replacement, margin + 4, yLeft, report.insert_qty)
+  yLeft -= 13
+  drawCheckItem('Retirement', report.retirement, margin + 4, yLeft, report.retirement_qty)
+  yLeft -= 18
+
+  // Additional Details (Yes/No questions)
+  yLeft = drawSectionHeader('ADDITIONAL DETAILS', yLeft, margin, colWidth)
+
+  drawYesNo('Section Out Main: ', report.section_out_main, margin + 4, yLeft)
+  yLeft -= 13
+  drawYesNo('Excessive Haul Off: ', report.excessive_haul_off, margin + 4, yLeft)
+  yLeft -= 13
+  drawYesNo('Excessive Restoration: ', report.excessive_restoration, margin + 4, yLeft)
+  yLeft -= 13
+  drawYesNo('Downtown/Extensive Paving: ', report.downtown_extensive_paving, margin + 4, yLeft)
+  yLeft -= 13
+  drawYesNo('Increased Traffic Control: ', report.increased_traffic_control, margin + 4, yLeft)
+  yLeft -= 13
+  drawYesNo('Rock in Bellhole: ', report.rock_in_bellhole, margin + 4, yLeft)
+  yLeft -= 13
+  drawYesNo('Street Plates Used: ', report.street_plates_used, margin + 4, yLeft)
+  yLeft -= 13
+  drawYesNo('Vac Truck Used: ', report.vac_truck_used, margin + 4, yLeft)
+  yLeft -= 6
+
+  // ---- RIGHT COLUMN ----
+  const rightX = colMid + 6
+
+  // Downtime
+  yRight = drawSectionHeader('DOWNTIME', yRight, colMid, colWidth + 6)
+
+  for (let i = 0; i < 3; i++) {
+    const period = downtimePeriods[i]
+    const label = `Period ${i + 1}: `
+    if (period && (period.start || period.end)) {
+      drawLabelValue(label, `${period.start || '--'} to ${period.end || '--'}`, rightX, yRight, colWidth)
+    } else {
+      drawLabelValue(label, '--', rightX, yRight, colWidth)
+    }
+    yRight -= 13
+  }
+  yRight -= 5
 
   // Adders
-  setCheck('no_blow_kit', report.no_blow_kit)
-  setCheck('short_stop_2_4', report.short_stop_2_4)
-  setCheck('short_stop_6_plus', report.short_stop_6_plus)
+  yRight = drawSectionHeader('ADDERS', yRight, colMid, colWidth + 6)
+
+  drawCheckItem('No-Blow Kit', report.no_blow_kit, rightX, yRight, report.no_blow_kit_qty)
+  yRight -= 13
+  drawCheckItem('Short Stop 2-4"', report.short_stop_2_4, rightX, yRight, report.short_stop_2_4_qty)
+  yRight -= 13
+  drawCheckItem('Short Stop 6+"', report.short_stop_6_plus, rightX, yRight, report.short_stop_6_plus_qty)
+  yRight -= 18
 
   // Welder
-  setCheck('welder_used_yes', report.welder_used === true)
-  setCheck('welder_used_no', report.welder_used === false)
-  setCheck('welder_bobcat', report.welder_type === 'bobcat_welder')
-  setCheck('welder_subbed', report.welder_type === 'subbed_out_welder')
+  yRight = drawSectionHeader('WELDER', yRight, colMid, colWidth + 6)
+
+  drawYesNo('Used: ', report.welder_used, rightX, yRight)
+  yRight -= 13
+  if (report.welder_used) {
+    drawCheckItem('Bobcat Welder', report.welder_type === 'bobcat_welder', rightX + 10, yRight)
+    drawCheckItem('Subbed Out', report.welder_type === 'subbed_out_welder', rightX + 130, yRight)
+    yRight -= 13
+  }
+  yRight -= 5
 
   // Bore
-  setCheck('bore_used_yes', report.bore_used === true)
-  setCheck('bore_used_no', report.bore_used === false)
-  setCheck('bore_bobcat', report.bore_type === 'bobcat_bore')
-  setCheck('bore_subbed', report.bore_type === 'subbed_out_bore')
-  setCheck('soil_type_dirt', report.soil_type === 'dirt')
-  setCheck('soil_type_rock', report.soil_type === 'rock')
+  yRight = drawSectionHeader('BORE', yRight, colMid, colWidth + 6)
 
-  // Leak repair completed
-  setCheck('leak_repair_completed_yes', report.leak_repair_completed === true)
-  setCheck('leak_repair_completed_no', report.leak_repair_completed === false)
+  drawYesNo('Used: ', report.bore_used, rightX, yRight)
+  yRight -= 13
+  if (report.bore_used) {
+    drawCheckItem('Bobcat Bore', report.bore_type === 'bobcat_bore', rightX + 10, yRight)
+    drawCheckItem('Subbed Out', report.bore_type === 'subbed_out_bore', rightX + 130, yRight)
+    yRight -= 13
+    page.drawText('Soil:', { x: rightX + 10, y: yRight, font, size: 8, color: gray })
+    drawCheckItem('Dirt', report.soil_type === 'dirt', rightX + 45, yRight)
+    drawCheckItem('Rock', report.soil_type === 'rock', rightX + 100, yRight)
+    yRight -= 13
+    drawLabelValue('Size: ', report.bore_size_inches ? `${report.bore_size_inches}"` : '--', rightX + 10, yRight, 100)
+    drawLabelValue('Footage: ', report.bore_footage ? `${report.bore_footage} ft` : '--', rightX + 120, yRight, 120)
+    yRight -= 13
+  }
+  yRight -= 6
 
-  // Flatten form to make it non-editable in the output
-  form.flatten()
+  // Draw vertical divider between columns
+  const twoColEndY = Math.min(yLeft, yRight)
+  page.drawLine({ start: { x: colMid - 3, y: twoColStartY + 8 }, end: { x: colMid - 3, y: twoColEndY }, thickness: 0.5, color: lineGray })
 
-  // Return PDF bytes
+  // ============================================
+  // FULL-WIDTH SECTIONS BELOW TWO COLUMNS
+  // ============================================
+  y = twoColEndY - 6
+  drawLine(y + 4)
+
+  // Crew Times & Completion
+  y = drawSectionHeader('CREW TIMES & COMPLETION', y)
+  drawLabelValue('Start Time: ', report.crew_start_time || '--', margin + 4, y, 160)
+  drawLabelValue('End Time: ', report.crew_end_time || '--', margin + 180, y, 160)
+  drawYesNo('Repair Completed: ', report.leak_repair_completed, margin + 360, y)
+  y -= 18
+
+  // FCC
+  drawLine(y + 6)
+  y -= 2
+  drawLabelValue('FCC: ', foremanEmployee?.name || '--', margin + 4, y, contentWidth)
+  y -= 18
+
+  // Notes
+  y = drawSectionHeader('NOTES', y)
+  if (notesText) {
+    const noteLines = wrapText(notesText, contentWidth - 8, font, 8)
+    for (const line of noteLines) {
+      if (y < 30) break // Don't overflow page
+      page.drawText(line, { x: margin + 4, y, font, size: 8, color: black })
+      y -= 12
+    }
+  } else {
+    page.drawText('--', { x: margin + 4, y, font, size: 8, color: gray })
+  }
+
   const pdfBytes = await pdfDoc.save()
   return pdfBytes
 }
