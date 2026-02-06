@@ -4530,14 +4530,9 @@ const SupervisorJobReviewView = ({ profile, crews, jobSubmissions, profiles, onR
 
   const handleApprove = async (job) => {
     setLoading(true)
-    const { error } = await supabase
-      .from('job_submissions')
-      .update({
-        status: 'pending_admin',
-        supervisor_reviewed_by: profile.id,
-        supervisor_reviewed_at: new Date().toISOString(),
-      })
-      .eq('id', job.id)
+    const { error } = await supabase.rpc('supervisor_approve_job', {
+      p_job_id: job.id
+    })
 
     if (error) {
       console.error('Error approving job:', error)
