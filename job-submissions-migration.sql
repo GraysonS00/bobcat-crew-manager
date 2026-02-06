@@ -137,9 +137,20 @@ CREATE POLICY "Supervisors can insert submissions" ON public.job_submissions
 
 -- Supervisors can update foreman submissions (to approve/edit before forwarding)
 CREATE POLICY "Supervisors can update foreman submissions" ON public.job_submissions
-    FOR UPDATE USING (
+    FOR UPDATE
+    USING (
         get_user_role() = 'supervisor'
         AND status = 'pending_supervisor'
+        AND submitted_by IN (
+            SELECT c.foreman_user_id
+            FROM public.crews c
+            WHERE c.supervisor_id = auth.uid()
+            AND c.foreman_user_id IS NOT NULL
+        )
+    )
+    WITH CHECK (
+        get_user_role() = 'supervisor'
+        AND status IN ('pending_supervisor', 'pending_admin')
         AND submitted_by IN (
             SELECT c.foreman_user_id
             FROM public.crews c
