@@ -10,6 +10,41 @@ const AuthContext = createContext({})
 export const useAuth = () => useContext(AuthContext)
 
 // =============================================
+// PWA UPDATE TOAST
+// =============================================
+
+const UpdateToast = () => {
+  const [showUpdate, setShowUpdate] = useState(false)
+
+  useEffect(() => {
+    const handler = () => setShowUpdate(true)
+    window.addEventListener('pwa-update-available', handler)
+    return () => window.removeEventListener('pwa-update-available', handler)
+  }, [])
+
+  if (!showUpdate) return null
+
+  return (
+    <div className="fixed bottom-4 left-4 right-4 z-50 flex justify-center">
+      <div className="bg-zinc-800 border border-zinc-700 rounded-xl shadow-2xl px-5 py-4 flex items-center gap-4 max-w-sm w-full">
+        <div className="flex-1">
+          <p className="text-zinc-100 text-sm font-medium">Update available</p>
+          <p className="text-zinc-400 text-xs mt-0.5">A new version is ready.</p>
+        </div>
+        <button
+          onClick={() => {
+            if (window.__pwaUpdateSW) window.__pwaUpdateSW(true)
+          }}
+          className="bg-amber-500 hover:bg-amber-400 text-zinc-900 font-semibold px-4 py-2 rounded-lg text-sm transition-colors shrink-0"
+        >
+          Update
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// =============================================
 // UTILITY COMPONENTS
 // =============================================
 
@@ -1628,11 +1663,11 @@ export default function App() {
   }
 
   if (loading) {
-    return <LoadingScreen />
+    return <><UpdateToast /><LoadingScreen /></>
   }
 
   if (!session) {
-    return <LoginScreen />
+    return <><UpdateToast /><LoginScreen /></>
   }
 
   const renderView = () => {
@@ -1658,6 +1693,7 @@ export default function App() {
   return (
     <AuthContext.Provider value={{ session, profile }}>
       <div className="min-h-screen bg-zinc-950">
+        <UpdateToast />
         <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-zinc-900 via-zinc-950 to-zinc-950 pointer-events-none" />
         <div className="relative z-10">
           <Navigation 
