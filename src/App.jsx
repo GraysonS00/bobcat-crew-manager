@@ -3683,7 +3683,7 @@ const generateLeakReportPDF = async (report, crew, supervisorProfile, foremanEmp
   // FCC
   drawLine(y + 6)
   y -= 2
-  drawLabelValue('FCC: ', foremanEmployee?.name || '--', margin + 4, y, contentWidth)
+  drawLabelValue('FCC: ', report.fcc_name || '--', margin + 4, y, contentWidth)
   y -= 18
 
   // Notes
