@@ -354,7 +354,14 @@ Admin submits      → Admin approves (job # assigned) → Export CSV
 5. `Job Status` - Static: "Open"
 6. `Contract` - Project # (or blank)
 7. `Contact` - FCC (or blank)
-8. `AFE` - Leak # (or blank)
+8. `AFE` - Leak # with "Leak #" prefix (e.g., "Leak #12345") or blank
+
+**CSV Export Process:**
+- Admin clicks "Export CSV" button on Approved tab
+- Downloads to browser's default download folder
+- Filename: `job_submissions_YYYY-MM-DD.csv`
+- After download, prompt asks "Mark these jobs as exported?"
+- If yes, jobs move to `exported` status
 
 **Views:**
 - `SubmitJobView` - Foremen/Supervisors/Admins submit new jobs
@@ -370,3 +377,25 @@ Admin submits      → Admin approves (job # assigned) → Export CSV
 **Dashboard Notifications:**
 - Supervisors see pending foreman job count
 - Admins see pending admin approval count
+
+**Supervisor Approval (RPC Function):**
+Supervisor approval uses an RPC function to bypass RLS complexity:
+```sql
+-- Function: supervisor_approve_job(p_job_id UUID)
+-- Validates supervisor can approve, then updates status to pending_admin
+-- Called via: supabase.rpc('supervisor_approve_job', { p_job_id: job.id })
+```
+
+**RLS Policies for job_submissions:**
+- Admins: full access (FOR ALL)
+- Supervisors: can view own submissions, view/update foreman submissions (pending_supervisor only)
+- Foremen: can view/insert own submissions
+
+**Key RLS Note:** The supervisor update policy uses `WITH CHECK (true)` because the status changes from `pending_supervisor` to `pending_admin`, and a restrictive WITH CHECK would block the update.
+
+**Database Functions:**
+- `assign_job_number(p_submission_id, p_sequence_id)` - Atomic job number assignment with row locking
+- `bulk_approve_job_submissions(p_submission_ids[], p_sequence_ids[])` - Bulk approval
+- `supervisor_approve_job(p_job_id)` - SECURITY DEFINER function for supervisor approval
+- `get_supervisor_sequence_id(p_supervisor_id)` - Helper to get supervisor's sequence
+- `get_foreman_sequence_id(p_foreman_user_id)` - Helper to check if foreman can submit
