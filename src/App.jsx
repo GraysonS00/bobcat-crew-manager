@@ -4828,7 +4828,7 @@ const AdminJobSubmissionsView = ({ jobSubmissions, profiles, jobSequences, seque
       'Open',
       job.project_number || '',
       job.fcc || '',
-      job.leak_number || '',
+      job.leak_number ? `Leak # ${job.leak_number}` : '',
     ])
 
     const csvContent = [headers, ...rows].map(row =>
