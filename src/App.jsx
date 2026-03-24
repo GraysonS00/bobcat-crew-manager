@@ -470,7 +470,7 @@ const Navigation = ({ currentView, setCurrentView, profile, onLogout }) => {
       { id: 'crews', label: 'My Crews', icon: Icons.Users },
       { id: 'equipment', label: 'Equipment', icon: Icons.Truck },
       { id: 'review-reports', label: 'Review Reports', icon: Icons.Document },
-      { id: 'submit-job', label: 'Submit Job', icon: Icons.Clipboard },
+      { id: 'submit-job', label: 'Submit New Job', icon: Icons.Clipboard },
       { id: 'review-jobs', label: 'Review Jobs', icon: Icons.CheckCircle },
       { id: 'job-list', label: 'Job List', icon: Icons.List },
     ],
@@ -479,7 +479,7 @@ const Navigation = ({ currentView, setCurrentView, profile, onLogout }) => {
       { id: 'my-crew', label: 'My Crew', icon: Icons.Users },
       { id: 'my-equipment', label: 'Equipment', icon: Icons.Truck },
       { id: 'my-leak-reports', label: 'Leak Reports', icon: Icons.Document },
-      { id: 'submit-job', label: 'Submit Job', icon: Icons.Clipboard },
+      { id: 'submit-job', label: 'Submit New Job', icon: Icons.Clipboard },
       { id: 'job-list', label: 'Job List', icon: Icons.List },
     ],
   }
