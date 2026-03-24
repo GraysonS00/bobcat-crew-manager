@@ -3048,7 +3048,12 @@ const LeakReportForm = ({ formData, updateForm, addDowntimePeriod, updateDowntim
         <YesNoToggle label="Downtown extensive paving?" value={formData.downtown_extensive_paving} onChange={(v) => updateForm('downtown_extensive_paving', v)} disabled={disabled} />
         <YesNoToggle label="Increased Traffic control?" value={formData.increased_traffic_control} onChange={(v) => updateForm('increased_traffic_control', v)} disabled={disabled} />
         <YesNoToggle label="Rock in Bellhole?" value={formData.rock_in_bellhole} onChange={(v) => updateForm('rock_in_bellhole', v)} disabled={disabled} />
-        <YesNoToggle label="Street Plates Used?" value={formData.street_plates_used} onChange={(v) => updateForm('street_plates_used', v)} disabled={disabled} />
+        <div className="space-y-2">
+          <YesNoToggle label="Street Plates Used?" value={formData.street_plates_used} onChange={(v) => updateForm('street_plates_used', v)} disabled={disabled} />
+          {formData.street_plates_used === true && (
+            <Input label="Street Plates Qty" type="number" value={formData.street_plates_qty ?? ''} onChange={(e) => updateForm('street_plates_qty', e.target.value ? parseInt(e.target.value) : null)} placeholder="Quantity" disabled={disabled} />
+          )}
+        </div>
         <YesNoToggle label="Vac Truck Used?" value={formData.vac_truck_used} onChange={(v) => updateForm('vac_truck_used', v)} disabled={disabled} />
       </div>
     )}
@@ -3131,7 +3136,6 @@ const LeakReportForm = ({ formData, updateForm, addDowntimePeriod, updateDowntim
     <div className="space-y-4">
       <h3 className="text-lg font-semibold text-amber-400 border-b border-zinc-800 pb-2">FCC Information</h3>
       <Input label="FCC Name" value={formData.fcc_name} onChange={(e) => updateForm('fcc_name', e.target.value)} disabled={disabled} />
-      <Input label="FCC Signature" value={formData.fcc_signature} onChange={(e) => updateForm('fcc_signature', e.target.value)} placeholder="Type name" disabled={disabled} />
     </div>
 
     <div className="space-y-4">
@@ -3198,7 +3202,7 @@ const ForemanLeakReportsView = ({ leakReports, crews, profile, onRefresh, logAct
     date: new Date().toISOString().split('T')[0], supervisor: '', project_number: '', leak_number: '', address: '', job_type: 'regular_leak',
     crew_called_off_to_grade_1: false, time_called_off_to_grade_1: '', leak_turned_into_grade_1: false, time_leak_turned_grade_1: '',
     leak_located: null, leak_located_before_arrival: null, took_over_25_min_to_locate: null, section_out_main: null, excessive_haul_off: null,
-    excessive_restoration: null, downtown_extensive_paving: null, increased_traffic_control: null, rock_in_bellhole: null, street_plates_used: null,
+    excessive_restoration: null, downtown_extensive_paving: null, increased_traffic_control: null, rock_in_bellhole: null, street_plates_used: null, street_plates_qty: null,
     vac_truck_used: null, leak_type: '', pipe_type: '', short_side: false, short_side_qty: null, long_side: false, long_side_qty: null,
     insert_replacement: false, insert_qty: null, retirement: false, retirement_qty: null, downtime_periods: [], no_blow_kit: false, no_blow_kit_qty: null,
     short_stop_2_4: false, short_stop_2_4_qty: null, short_stop_6_plus: false, short_stop_6_plus_qty: null, welder_used: null, welder_type: '',
@@ -3227,7 +3231,7 @@ const ForemanLeakReportsView = ({ leakReports, crews, profile, onRefresh, logAct
       leak_located_before_arrival: formData.leak_located_before_arrival, took_over_25_min_to_locate: formData.took_over_25_min_to_locate,
       section_out_main: formData.section_out_main, excessive_haul_off: formData.excessive_haul_off, excessive_restoration: formData.excessive_restoration,
       downtown_extensive_paving: formData.downtown_extensive_paving, increased_traffic_control: formData.increased_traffic_control,
-      rock_in_bellhole: formData.rock_in_bellhole, street_plates_used: formData.street_plates_used, vac_truck_used: formData.vac_truck_used,
+      rock_in_bellhole: formData.rock_in_bellhole, street_plates_used: formData.street_plates_used, street_plates_qty: formData.street_plates_qty || null, vac_truck_used: formData.vac_truck_used,
       leak_type: formData.leak_type || null, pipe_type: formData.pipe_type || null, short_side: formData.short_side,
       short_side_qty: formData.short_side_qty || null, long_side: formData.long_side, long_side_qty: formData.long_side_qty || null,
       insert_replacement: formData.insert_replacement, insert_qty: formData.insert_qty || null, retirement: formData.retirement,
@@ -3716,6 +3720,7 @@ const generateLeakReportPDF = async (report, crew, supervisorProfile, foremanEmp
   drawYesNo('Rock in Bellhole: ', report.rock_in_bellhole, margin + 4, yLeft)
   yLeft -= 13
   drawYesNo('Street Plates Used: ', report.street_plates_used, margin + 4, yLeft)
+  if (report.street_plates_used && report.street_plates_qty) { yLeft -= 13; drawLabelValue('Street Plates Qty: ', String(report.street_plates_qty), margin + 4, yLeft) }
   yLeft -= 13
   drawYesNo('Vac Truck Used: ', report.vac_truck_used, margin + 4, yLeft)
   yLeft -= 6
