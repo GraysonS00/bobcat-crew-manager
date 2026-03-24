@@ -4842,10 +4842,8 @@ const SubmitJobView = ({ profile, crews, jobSubmissions, jobSequences, sequenceA
       }
       const body = new FormData()
       body.append('file', fileToSend)
-      const { data: { session } } = await supabase.auth.getSession()
       const res = await fetch('https://jkghcufbigixfpnnfcet.supabase.co/functions/v1/extract-job-info', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY}` },
         body,
       })
       const data = await res.json()
