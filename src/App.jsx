@@ -170,25 +170,31 @@ const TimeInput = ({ label, value, onChange, disabled = false }) => (
 )
 
 const CheckboxWithQty = ({ label, checked, onCheckChange, qty, onQtyChange, disabled = false }) => (
-  <div className="flex items-center gap-3 py-2">
-    <button
-      type="button"
-      onClick={() => !disabled && onCheckChange(!checked)}
-      disabled={disabled}
-      className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-colors ${checked ? 'bg-amber-500 border-amber-500 text-zinc-900' : 'border-zinc-600'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-    >
-      {checked && <Icons.Check />}
-    </button>
-    <span className="text-zinc-300 flex-1">{label}</span>
-    {checked && (
-      <input
-        type="number"
-        value={qty || ''}
-        onChange={(e) => onQtyChange(parseInt(e.target.value) || 0)}
-        placeholder="Qty"
+  <div className="py-2 space-y-2">
+    <div className="flex items-center gap-3">
+      <button
+        type="button"
+        onClick={() => { if (!disabled) { const next = !checked; onCheckChange(next); if (next) onQtyChange(1) } }}
         disabled={disabled}
-        className="w-20 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-zinc-100 text-sm"
-      />
+        className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-colors flex-shrink-0 ${checked ? 'bg-amber-500 border-amber-500 text-zinc-900' : 'border-zinc-600'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+      >
+        {checked && <Icons.Check />}
+      </button>
+      <span className="text-zinc-300">{label}</span>
+    </div>
+    {checked && (
+      <div className="ml-9 flex items-center gap-2">
+        <span className="text-sm text-zinc-400">Quantity:</span>
+        <button type="button" onClick={() => onQtyChange(Math.max(0, (qty || 0) - 1))} disabled={disabled} className="w-9 h-9 flex items-center justify-center bg-zinc-700 hover:bg-zinc-600 text-zinc-100 rounded-lg text-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed">−</button>
+        <input
+          type="number"
+          value={qty ?? ''}
+          onChange={(e) => onQtyChange(e.target.value === '' ? null : parseInt(e.target.value))}
+          disabled={disabled}
+          className="w-20 text-center bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 focus:outline-none focus:border-amber-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        />
+        <button type="button" onClick={() => onQtyChange((qty || 0) + 1)} disabled={disabled} className="w-9 h-9 flex items-center justify-center bg-zinc-700 hover:bg-zinc-600 text-zinc-100 rounded-lg text-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed">+</button>
+      </div>
     )}
   </div>
 )
