@@ -4800,7 +4800,8 @@ const SubmitJobView = ({ profile, crews, jobSubmissions, jobSequences, sequenceA
   const [extracting, setExtracting] = useState(false)
   const [extractError, setExtractError] = useState('')
   const [fccPrompt, setFccPrompt] = useState(false)
-  const [extractedJobs, setExtractedJobs] = useState(null)
+  const [bulkForms, setBulkForms] = useState(null)
+  const [bulkSubmitting, setBulkSubmitting] = useState(false)
 
   const isForeman = profile?.role === 'foreman'
   const isSupervisor = profile?.role === 'supervisor'
@@ -4856,7 +4857,17 @@ const SubmitJobView = ({ profile, crews, jobSubmissions, jobSequences, sequenceA
         }))
         setFccPrompt(true)
       } else if (jobs.length > 1) {
-        setExtractedJobs(jobs)
+        setBulkForms(jobs.map((job, i) => ({
+          id: i,
+          job_type: 'regular_leak',
+          address: job.address || '',
+          fcc: '',
+          leak_number: job.leak_number || '',
+          project_number: '',
+          submitting: false,
+          submitted: false,
+          error: '',
+        })))
       } else {
         throw new Error('No job info found in this file')
       }
@@ -4865,6 +4876,46 @@ const SubmitJobView = ({ profile, crews, jobSubmissions, jobSequences, sequenceA
     }
     setExtracting(false)
     e.target.value = ''
+  }
+
+  const updateBulkForm = (id, field, value) => {
+    setBulkForms(prev => prev.map(f => f.id === id ? { ...f, [field]: value } : f))
+  }
+
+  const handleBulkSubmitOne = async (formData) => {
+    const { id, job_type, address, fcc, leak_number, project_number } = formData
+    setBulkForms(prev => prev.map(f => f.id === id ? { ...f, submitting: true, error: '' } : f))
+    const status = isForeman ? 'pending_supervisor' : 'pending_admin'
+    const sequenceId = isAdmin ? (selectedSequenceId || null) : getUserSequenceId()
+    const { data, error: insertError } = await supabase
+      .from('job_submissions')
+      .insert([{
+        submitted_by: profile.id,
+        status,
+        job_type,
+        address: address.trim(),
+        fcc: (fcc || '').trim() || null,
+        leak_number: (leak_number || '').trim() || null,
+        project_number: (project_number || '').trim() || null,
+        sequence_id: sequenceId || null,
+      }])
+      .select()
+    if (insertError) {
+      setBulkForms(prev => prev.map(f => f.id === id ? { ...f, submitting: false, error: insertError.message } : f))
+    } else {
+      if (logActivity) await logActivity('submitted', 'job_submission', data?.[0]?.id, address.trim())
+      setBulkForms(prev => prev.map(f => f.id === id ? { ...f, submitting: false, submitted: true } : f))
+      onRefresh()
+    }
+  }
+
+  const handleSubmitAll = async () => {
+    setBulkSubmitting(true)
+    const pending = bulkForms.filter(f => !f.submitted && f.address.trim())
+    for (const form of pending) {
+      await handleBulkSubmitOne(form)
+    }
+    setBulkSubmitting(false)
   }
 
   const getPickerScore = (job, q) => {
@@ -5014,6 +5065,124 @@ const SubmitJobView = ({ profile, crews, jobSubmissions, jobSequences, sequenceA
         <p className="text-zinc-500">Submit new jobs for processing</p>
       </div>
 
+      {/* Bulk forms from PDF extraction */}
+      {bulkForms && (
+        <Card>
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <h2 className="text-lg font-semibold text-zinc-100">Extracted Jobs — {bulkForms.length} found</h2>
+              <p className="text-sm text-zinc-500">Add FCC names and review each job, then submit all at once or individually.</p>
+            </div>
+            <button onClick={() => setBulkForms(null)} className="text-zinc-400 hover:text-zinc-200 ml-4 flex-shrink-0"><Icons.X /></button>
+          </div>
+
+          {bulkForms.every(f => f.submitted) ? (
+            <div className="text-center py-6">
+              <p className="text-emerald-400 font-medium mb-4">All {bulkForms.length} jobs submitted!</p>
+              <Button variant="secondary" onClick={() => setBulkForms(null)}>Done</Button>
+            </div>
+          ) : (
+            <>
+              <div className="flex justify-end mb-4">
+                <Button
+                  onClick={handleSubmitAll}
+                  loading={bulkSubmitting}
+                  disabled={bulkForms.filter(f => !f.submitted && f.address.trim()).length === 0 || (isAdmin && !selectedSequenceId)}
+                >
+                  <span className="flex items-center gap-2"><Icons.Plus /> Submit All ({bulkForms.filter(f => !f.submitted).length} remaining)</span>
+                </Button>
+              </div>
+              {isAdmin && (
+                <div className="mb-4">
+                  <Select
+                    label="Sequence (applies to all)"
+                    value={selectedSequenceId}
+                    onChange={(e) => setSelectedSequenceId(e.target.value)}
+                    options={[
+                      { value: '', label: 'Select sequence...' },
+                      ...jobSequences.map(s => ({ value: s.id, label: s.prefix }))
+                    ]}
+                  />
+                </div>
+              )}
+              <div className="space-y-4">
+                {bulkForms.map((form, i) => (
+                  <div key={form.id} className={`p-4 rounded-lg border ${form.submitted ? 'border-emerald-700 bg-emerald-900/10' : 'border-zinc-700 bg-zinc-800/50'}`}>
+                    {form.submitted ? (
+                      <div className="flex items-center gap-2 text-emerald-400">
+                        <span className="text-emerald-400">✓</span>
+                        <span className="font-medium text-sm">Submitted: {form.address}</span>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wide">Job {i + 1} of {bulkForms.length}</span>
+                          <button
+                            type="button"
+                            onClick={() => setBulkForms(prev => prev.filter(f => f.id !== form.id))}
+                            className="text-xs text-zinc-500 hover:text-red-400"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                        {form.error && <p className="text-red-400 text-xs bg-red-900/20 border border-red-800 rounded px-2 py-1">{form.error}</p>}
+                        <Select
+                          label="Job Type"
+                          value={form.job_type}
+                          onChange={(e) => updateBulkForm(form.id, 'job_type', e.target.value)}
+                          options={JOB_TYPES}
+                        />
+                        <div>
+                          <label className="block text-sm font-medium text-zinc-300 mb-1">Address</label>
+                          <input
+                            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500"
+                            value={form.address}
+                            onChange={(e) => updateBulkForm(form.id, 'address', e.target.value)}
+                            placeholder="123 Main St, City, TX"
+                          />
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <div className={!form.fcc ? 'rounded-lg ring-2 ring-amber-500/40 p-1 -m-1' : ''}>
+                            <Input
+                              label={!form.fcc ? 'FCC ⚠ Required' : 'FCC'}
+                              value={form.fcc}
+                              onChange={(e) => updateBulkForm(form.id, 'fcc', e.target.value)}
+                              placeholder="Enter FCC name"
+                            />
+                          </div>
+                          <Input
+                            label="Leak # (optional)"
+                            value={form.leak_number}
+                            onChange={(e) => updateBulkForm(form.id, 'leak_number', e.target.value)}
+                            placeholder="Leak number"
+                          />
+                          <Input
+                            label="Project # (optional)"
+                            value={form.project_number}
+                            onChange={(e) => updateBulkForm(form.id, 'project_number', e.target.value)}
+                            placeholder="Project number"
+                          />
+                        </div>
+                        <div className="pt-1">
+                          <Button
+                            size="sm"
+                            onClick={() => handleBulkSubmitOne(form)}
+                            loading={form.submitting}
+                            disabled={!form.address.trim() || (isAdmin && !selectedSequenceId)}
+                          >
+                            <span className="flex items-center gap-1"><Icons.Plus /> Submit This Job</span>
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </Card>
+      )}
+
       {/* Submission Form */}
       <Card>
         <h2 className="text-lg font-semibold text-zinc-100 mb-4">New Job Submission</h2>
@@ -5038,41 +5207,6 @@ const SubmitJobView = ({ profile, crews, jobSubmissions, jobSequences, sequenceA
             </p>
           )}
         </div>
-
-        {/* Multi-job picker modal */}
-        {extractedJobs && (
-          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-            <div className="bg-zinc-900 border border-zinc-700 rounded-xl w-full max-w-md flex flex-col max-h-[80vh]">
-              <div className="flex items-center justify-between p-4 border-b border-zinc-800">
-                <div>
-                  <h2 className="text-lg font-semibold text-zinc-100">Multiple Job Sheets Found</h2>
-                  <p className="text-sm text-zinc-500">{extractedJobs.length} jobs detected — select one to fill in</p>
-                </div>
-                <button onClick={() => setExtractedJobs(null)} className="text-zinc-400 hover:text-zinc-200"><Icons.X /></button>
-              </div>
-              <div className="overflow-y-auto flex-1 p-2">
-                {extractedJobs.map((job, i) => (
-                  <button
-                    key={i}
-                    onClick={() => {
-                      setFormData(prev => ({
-                        ...prev,
-                        address: job.address || prev.address,
-                        leak_number: job.leak_number || prev.leak_number,
-                      }))
-                      setExtractedJobs(null)
-                      setFccPrompt(true)
-                    }}
-                    className="w-full text-left p-3 rounded-lg hover:bg-zinc-800 transition-colors border border-transparent hover:border-zinc-700"
-                  >
-                    <p className="font-medium text-zinc-100 text-sm">{job.address || <span className="text-zinc-500 italic">No address found</span>}</p>
-                    {job.leak_number && <p className="text-xs text-amber-400 mt-0.5">Leak #: {job.leak_number}</p>}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <Select
