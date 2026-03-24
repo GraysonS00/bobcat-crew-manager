@@ -77,7 +77,8 @@ If a field cannot be found for a sheet, use null for that field.`
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
+    const message = err?.message || (typeof err === 'string' ? err : JSON.stringify(err)) || 'Unknown error'
+    return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
