@@ -2,6 +2,7 @@ import React, { useState, useEffect, createContext, useContext } from 'react'
 import { supabase } from './supabaseClient'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import JSZip from 'jszip'
+import * as XLSX from 'xlsx'
 
 // =============================================
 // CONTEXT
@@ -337,6 +338,16 @@ const Icons = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
     </svg>
   ),
+  Upload: () => (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+    </svg>
+  ),
+  List: () => (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+    </svg>
+  ),
 }
 
 // =============================================
@@ -445,6 +456,7 @@ const Navigation = ({ currentView, setCurrentView, profile, onLogout }) => {
       { id: 'equipment', label: 'Equipment', icon: Icons.Truck },
       { id: 'leak-reports', label: 'Leak Reports', icon: Icons.Document },
       { id: 'job-submissions', label: 'Jobs', icon: Icons.Clipboard },
+      { id: 'job-list', label: 'Job List', icon: Icons.List },
       { id: 'job-settings', label: 'Job Settings', icon: Icons.Settings },
     ],
     supervisor: [
@@ -454,6 +466,7 @@ const Navigation = ({ currentView, setCurrentView, profile, onLogout }) => {
       { id: 'review-reports', label: 'Review Reports', icon: Icons.Document },
       { id: 'submit-job', label: 'Submit Job', icon: Icons.Clipboard },
       { id: 'review-jobs', label: 'Review Jobs', icon: Icons.CheckCircle },
+      { id: 'job-list', label: 'Job List', icon: Icons.List },
     ],
     foreman: [
       { id: 'dashboard', label: 'Dashboard', icon: Icons.Home },
@@ -461,6 +474,7 @@ const Navigation = ({ currentView, setCurrentView, profile, onLogout }) => {
       { id: 'my-equipment', label: 'Equipment', icon: Icons.Truck },
       { id: 'my-leak-reports', label: 'Leak Reports', icon: Icons.Document },
       { id: 'submit-job', label: 'Submit Job', icon: Icons.Clipboard },
+      { id: 'job-list', label: 'Job List', icon: Icons.List },
     ],
   }
 
@@ -4403,7 +4417,182 @@ const JOB_TYPE_PREFIXES = {
 const getJobTypeLabel = (value) => JOB_TYPES.find(t => t.value === value)?.label || value
 const getAddressWithPrefix = (jobType, address) => (JOB_TYPE_PREFIXES[jobType] || '') + address
 
-const SubmitJobView = ({ profile, crews, jobSubmissions, jobSequences, sequenceAssignments, onRefresh, logActivity }) => {
+// =============================================
+// JOB LIST VIEW
+// =============================================
+
+const JobListView = ({ profile, jobList, onRefresh, logActivity }) => {
+  const isAdmin = profile?.role === 'admin'
+  const [searchQuery, setSearchQuery] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+  const [uploadSuccess, setUploadSuccess] = useState('')
+  const [lastUploaded, setLastUploaded] = useState(null)
+
+  const getJobScore = (job, q) => {
+    const query = q.toLowerCase()
+    const desc = (job.job_desc || '').toLowerCase()
+    const num = (job.job_number || '').toLowerCase()
+    const contract = (job.contract || '').toLowerCase()
+    const contact = (job.contact || '').toLowerCase()
+    const afe = (job.afe || '').toLowerCase()
+    if (num === query || desc === query) return 100
+    if (num.startsWith(query) || desc.startsWith(query)) return 80
+    if (num.includes(query) || desc.includes(query)) return 60
+    if (contract.includes(query) || contact.includes(query) || afe.includes(query)) return 40
+    // fuzzy: all query chars appear in order
+    let idx = 0
+    for (const ch of query) {
+      const found = desc.indexOf(ch, idx)
+      if (found === -1) return 0
+      idx = found + 1
+    }
+    return 10
+  }
+
+  const filteredJobs = searchQuery.trim().length < 2
+    ? jobList.slice(0, 50)
+    : jobList
+        .map(job => ({ job, score: getJobScore(job, searchQuery.trim()) }))
+        .filter(({ score }) => score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 100)
+        .map(({ job }) => job)
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    setUploadError('')
+    setUploadSuccess('')
+    try {
+      const buffer = await file.arrayBuffer()
+      const workbook = XLSX.read(buffer, { type: 'array' })
+      const sheet = workbook.Sheets[workbook.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json(sheet)
+
+      const jobs = rows
+        .map(row => ({
+          job_number: String(row['__pkJobsID'] || '').trim(),
+          job_desc: String(row['jobdesc'] || '').trim(),
+          contract: String(row['Contract'] || '').trim() || null,
+          afe: String(row['AFE'] || '').trim() || null,
+          contact: String(row['Contact'] || '').trim() || null,
+        }))
+        .filter(j => j.job_number && j.job_desc)
+
+      if (jobs.length === 0) {
+        setUploadError('No valid jobs found. Check that the file has the correct columns.')
+        setUploading(false)
+        return
+      }
+
+      // Delete all existing rows then insert new ones in batches
+      const { error: deleteError } = await supabase
+        .from('job_list')
+        .delete()
+        .not('job_number', 'is', null)
+
+      if (deleteError) throw deleteError
+
+      const BATCH = 500
+      for (let i = 0; i < jobs.length; i += BATCH) {
+        const { error: insertError } = await supabase
+          .from('job_list')
+          .insert(jobs.slice(i, i + BATCH))
+        if (insertError) throw insertError
+      }
+
+      if (logActivity) {
+        await logActivity('uploaded', 'job_list', null, `${jobs.length} jobs`)
+      }
+      setUploadSuccess(`Uploaded ${jobs.length} jobs successfully.`)
+      setLastUploaded(new Date())
+      onRefresh()
+    } catch (err) {
+      setUploadError('Upload failed: ' + err.message)
+    }
+    setUploading(false)
+    e.target.value = ''
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-zinc-100">Job List</h1>
+          <p className="text-zinc-500">{jobList.length.toLocaleString()} jobs loaded</p>
+        </div>
+        {isAdmin && (
+          <div>
+            <label className="cursor-pointer">
+              <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFileUpload} disabled={uploading} />
+              <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${uploading ? 'bg-zinc-700 text-zinc-400 cursor-not-allowed' : 'bg-amber-500 hover:bg-amber-400 text-zinc-900 cursor-pointer'}`}>
+                <Icons.Upload /> {uploading ? 'Uploading...' : 'Upload .xlsx'}
+              </span>
+            </label>
+          </div>
+        )}
+      </div>
+
+      {uploadError && <p className="text-red-400 text-sm bg-red-900/20 border border-red-800 rounded-lg px-3 py-2">{uploadError}</p>}
+      {uploadSuccess && <p className="text-emerald-400 text-sm bg-emerald-900/20 border border-emerald-800 rounded-lg px-3 py-2">{uploadSuccess}</p>}
+
+      <div className="relative">
+        <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-zinc-400">
+          <Icons.Search />
+        </div>
+        <input
+          type="text"
+          placeholder="Search by job description, job #, project #, FCC, or leak #..."
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          className="w-full bg-zinc-800 border border-zinc-700 rounded-lg pl-10 pr-4 py-2.5 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500"
+        />
+        {searchQuery && (
+          <button onClick={() => setSearchQuery('')} className="absolute inset-y-0 right-3 flex items-center text-zinc-400 hover:text-zinc-200">
+            <Icons.X />
+          </button>
+        )}
+      </div>
+
+      {searchQuery.trim().length > 0 && searchQuery.trim().length < 2 && (
+        <p className="text-zinc-500 text-sm">Type at least 2 characters to search...</p>
+      )}
+
+      <div className="space-y-2">
+        {filteredJobs.map(job => (
+          <div key={job.id} className="p-4 bg-zinc-900/80 border border-zinc-800 rounded-lg">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-zinc-100 truncate">{job.job_desc}</p>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-sm text-zinc-400">
+                  <span className="text-amber-400 font-mono">{job.job_number}</span>
+                  {job.contract && <span>Project #: {job.contract}</span>}
+                  {job.afe && <span>Leak #: {job.afe}</span>}
+                  {job.contact && <span>FCC: {job.contact}</span>}
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+        {jobList.length === 0 && (
+          <div className="text-center py-12 text-zinc-500">
+            {isAdmin ? 'No jobs loaded. Upload an .xlsx file to get started.' : 'No jobs available. Ask your admin to upload the job list.'}
+          </div>
+        )}
+        {jobList.length > 0 && searchQuery.trim().length < 2 && (
+          <p className="text-center text-zinc-600 text-sm pt-2">Showing first 50 jobs. Search to find specific jobs.</p>
+        )}
+        {searchQuery.trim().length >= 2 && filteredJobs.length === 0 && (
+          <p className="text-center text-zinc-500 py-8">No jobs match "{searchQuery}"</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const SubmitJobView = ({ profile, crews, jobSubmissions, jobSequences, sequenceAssignments, jobList, onRefresh, logActivity }) => {
   const [formData, setFormData] = useState({
     job_type: 'regular_leak',
     address: '',
@@ -4419,6 +4608,49 @@ const SubmitJobView = ({ profile, crews, jobSubmissions, jobSequences, sequenceA
   const isSupervisor = profile?.role === 'supervisor'
   const isAdmin = profile?.role === 'admin'
   const [selectedSequenceId, setSelectedSequenceId] = useState('')
+  const [showJobPicker, setShowJobPicker] = useState(false)
+  const [pickerSearch, setPickerSearch] = useState('')
+
+  const getPickerScore = (job, q) => {
+    const query = q.toLowerCase()
+    const desc = (job.job_desc || '').toLowerCase()
+    const num = (job.job_number || '').toLowerCase()
+    const contract = (job.contract || '').toLowerCase()
+    const contact = (job.contact || '').toLowerCase()
+    const afe = (job.afe || '').toLowerCase()
+    if (num === query || desc === query) return 100
+    if (num.startsWith(query) || desc.startsWith(query)) return 80
+    if (num.includes(query) || desc.includes(query)) return 60
+    if (contract.includes(query) || contact.includes(query) || afe.includes(query)) return 40
+    let idx = 0
+    for (const ch of query) {
+      const found = desc.indexOf(ch, idx)
+      if (found === -1) return 0
+      idx = found + 1
+    }
+    return 10
+  }
+
+  const pickerResults = pickerSearch.trim().length < 2
+    ? []
+    : (jobList || [])
+        .map(job => ({ job, score: getPickerScore(job, pickerSearch.trim()) }))
+        .filter(({ score }) => score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 50)
+        .map(({ job }) => job)
+
+  const selectJobFromList = (job) => {
+    setFormData(prev => ({
+      ...prev,
+      address: job.job_desc || '',
+      fcc: job.contact || '',
+      leak_number: job.afe || '',
+      project_number: job.contract || '',
+    }))
+    setShowJobPicker(false)
+    setPickerSearch('')
+  }
 
   // Check if user can submit (has a sequence assigned via their supervisor)
   const getUserSequenceId = () => {
@@ -4553,13 +4785,27 @@ const SubmitJobView = ({ profile, crews, jobSubmissions, jobSequences, sequenceA
             />
           )}
 
-          <Input
-            label="Address"
-            value={formData.address}
-            onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-            placeholder="123 Main St, City, TX"
-            required
-          />
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <label className="block text-sm font-medium text-zinc-300">Address</label>
+              {(jobList || []).length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowJobPicker(true)}
+                  className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1"
+                >
+                  <Icons.Search /> Pick from Job List
+                </button>
+              )}
+            </div>
+            <input
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500"
+              value={formData.address}
+              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+              placeholder="123 Main St, City, TX"
+              required
+            />
+          </div>
 
           {formData.address && (
             <p className="text-sm text-zinc-500">
@@ -4627,6 +4873,56 @@ const SubmitJobView = ({ profile, crews, jobSubmissions, jobSequences, sequenceA
           )}
         </div>
       </Card>
+
+      {/* Job List Picker Modal */}
+      {showJobPicker && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-xl w-full max-w-lg flex flex-col max-h-[80vh]">
+            <div className="flex items-center justify-between p-4 border-b border-zinc-800">
+              <h2 className="text-lg font-semibold text-zinc-100">Pick from Job List</h2>
+              <button onClick={() => { setShowJobPicker(false); setPickerSearch('') }} className="text-zinc-400 hover:text-zinc-200"><Icons.X /></button>
+            </div>
+            <div className="p-4 border-b border-zinc-800">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-zinc-400">
+                  <Icons.Search />
+                </div>
+                <input
+                  autoFocus
+                  type="text"
+                  placeholder="Search job description, job #, project #..."
+                  value={pickerSearch}
+                  onChange={e => setPickerSearch(e.target.value)}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg pl-10 pr-4 py-2.5 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+            </div>
+            <div className="overflow-y-auto flex-1 p-2">
+              {pickerSearch.trim().length < 2 && (
+                <p className="text-zinc-500 text-sm text-center py-8">Type at least 2 characters to search...</p>
+              )}
+              {pickerSearch.trim().length >= 2 && pickerResults.length === 0 && (
+                <p className="text-zinc-500 text-sm text-center py-8">No jobs match "{pickerSearch}"</p>
+              )}
+              {pickerResults.map(job => (
+                <button
+                  key={job.id}
+                  onClick={() => selectJobFromList(job)}
+                  className="w-full text-left p-3 rounded-lg hover:bg-zinc-800 transition-colors"
+                >
+                  <p className="font-medium text-zinc-100 text-sm">{job.job_desc}</p>
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 text-xs text-zinc-400">
+                    <span className="text-amber-400 font-mono">{job.job_number}</span>
+                    {job.contract && <span>Project #: {job.contract}</span>}
+                    {job.afe && <span>Leak #: {job.afe}</span>}
+                    {job.contact && <span>FCC: {job.contact}</span>}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -5204,6 +5500,7 @@ export default function App() {
   const [jobSubmissions, setJobSubmissions] = useState([])
   const [jobSequences, setJobSequences] = useState([])
   const [sequenceAssignments, setSequenceAssignments] = useState([])
+  const [jobList, setJobList] = useState([])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -5227,7 +5524,7 @@ export default function App() {
   }
 
   const fetchAllData = async () => {
-    const [empRes, crewRes, equipRes, reportRes, profRes, logsRes, jobSubRes, seqRes, seqAssignRes] = await Promise.all([
+    const [empRes, crewRes, equipRes, reportRes, profRes, logsRes, jobSubRes, seqRes, seqAssignRes, jobListRes] = await Promise.all([
       supabase.from('employees').select('*').order('name'),
       supabase.from('crews').select('*, crew_members(*)').order('name'),
       supabase.from('equipment').select('*').order('created_at', { ascending: false }),
@@ -5237,6 +5534,7 @@ export default function App() {
       supabase.from('job_submissions').select('*').order('created_at', { ascending: false }),
       supabase.from('job_number_sequences').select('*').order('prefix'),
       supabase.from('supervisor_sequence_assignments').select('*'),
+      supabase.from('job_list').select('*').order('job_number'),
     ])
     setEmployees(empRes.data || [])
     setCrews(crewRes.data || [])
@@ -5247,6 +5545,7 @@ export default function App() {
     setJobSubmissions(jobSubRes.data || [])
     setJobSequences(seqRes.data || [])
     setSequenceAssignments(seqAssignRes.data || [])
+    setJobList(jobListRes.data || [])
   }
 
   const logActivity = async (action, entityType, entityId, entityName, details = null) => {
@@ -5287,7 +5586,8 @@ export default function App() {
       case 'review-reports': return <SupervisorReviewView leakReports={leakReports} crews={crews} profile={profile} onRefresh={fetchAllData} logActivity={logActivity} />
       case 'job-submissions': return <AdminJobSubmissionsView jobSubmissions={jobSubmissions} profiles={profiles} jobSequences={jobSequences} sequenceAssignments={sequenceAssignments} crews={crews} onRefresh={fetchAllData} logActivity={logActivity} />
       case 'job-settings': return <JobSettingsView jobSequences={jobSequences} sequenceAssignments={sequenceAssignments} profiles={profiles} onRefresh={fetchAllData} logActivity={logActivity} />
-      case 'submit-job': return <SubmitJobView profile={profile} crews={crews} jobSubmissions={jobSubmissions} jobSequences={jobSequences} sequenceAssignments={sequenceAssignments} onRefresh={fetchAllData} logActivity={logActivity} />
+      case 'job-list': return <JobListView profile={profile} jobList={jobList} onRefresh={fetchAllData} logActivity={logActivity} />
+      case 'submit-job': return <SubmitJobView profile={profile} crews={crews} jobSubmissions={jobSubmissions} jobSequences={jobSequences} sequenceAssignments={sequenceAssignments} jobList={jobList} onRefresh={fetchAllData} logActivity={logActivity} />
       case 'review-jobs': return <SupervisorJobReviewView profile={profile} crews={crews} jobSubmissions={jobSubmissions} profiles={profiles} onRefresh={fetchAllData} logActivity={logActivity} />
       default: return <Dashboard profile={profile} crews={crews} employees={employees} equipment={equipment} leakReports={leakReports} activityLogs={activityLogs} jobSubmissions={jobSubmissions} sequenceAssignments={sequenceAssignments} jobSequences={jobSequences} />
     }
