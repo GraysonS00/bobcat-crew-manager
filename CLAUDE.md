@@ -18,7 +18,7 @@ This is a **Progressive Web App (PWA)** for managing construction crews, equipme
 
 ### Monolithic Single-File Architecture
 
-The entire application lives in **App.jsx** (~3,500 lines) as a single React component with clearly marked sections:
+The entire application lives in **App.jsx** (~5,500+ lines) as a single React component with clearly marked sections:
 
 1. **AuthContext & Hooks** (top) - Session/profile context
 2. **UpdateToast** - PWA update prompt component
@@ -419,3 +419,136 @@ Uses **vite-plugin-pwa** to generate a Workbox service worker that precaches all
 - `index.html` — Manual `<link rel="manifest">` removed; plugin auto-injects it during build
 
 **Key detail:** `registerType: 'prompt'` means the new service worker waits until the user clicks Update. Calling `window.__pwaUpdateSW(true)` triggers `skipWaiting()` + page reload.
+
+### Job List Tab
+
+A searchable job list visible to all roles, populated from a FileMaker xlsx export. Replaces manual lookups and enables auto-fill in forms.
+
+**Database table:** `job_list`
+```sql
+- job_number (text)
+- job_desc   (text) — the full address/description
+- contract   (text) — project number
+- afe        (text) — leak number
+- contact    (text) — FCC name
+```
+
+**Admin upload:**
+- "Upload Job List (.xlsx)" button (admin only)
+- Parses xlsx with the `xlsx` library (already in package.json)
+- Deletes all existing rows, then inserts new rows in batches of 500
+- Replaces entire list on each upload (no incremental merge)
+
+**Fuzzy search:**
+- Searches `job_desc`, `job_number`, `contract`, `afe`, `contact`
+- Shows all jobs by default; caps search results at 200
+- `getJobListScore()` scoring: exact match > starts with > contains > fuzzy char match
+
+**Loading — Supabase 1000-row cap workaround:**
+- `fetchAllJobList()` paginates with `.range(from, from + 999)` in a loop until no more rows
+- Called in `fetchAllData()` via `Promise.all`, stored in `jobList` state
+- Do NOT use `.limit(10000)` — PostgREST ignores client limits above the server cap
+
+**Navigation:** `job-list` nav item added to all 3 roles.
+
+### Job List Picker in Forms
+
+Any form that has an Address field can optionally pick from the job list to auto-fill fields.
+
+**Available in:**
+- `LeakReportForm` (new leak reports — all roles)
+- `SubmitJobView` (job submissions — all roles)
+
+**How it works:**
+- "Pick from Job List" link button appears next to the Address label
+- Opens a search modal with fuzzy matching
+- Selecting a job fills: address (`job_desc`), project # (`contract`), leak # (`afe`), FCC (`contact`)
+- `jobList` prop must be passed down to each view; `renderView` handles this
+
+### Leak Report Form Updates
+
+**FCC Signature removed:** The FCC Signature input was removed from `LeakReportForm`. Only FCC Name remains.
+
+**Street Plates Used — qty stepper:**
+- Checkbox auto-fills quantity to 1 when checked
+- Shows `Quantity:` label with `−` / `+` buttons and a direct-edit number input
+- User can delete and type any number directly
+
+**CheckboxWithQty — stepper for Short Side, Long Side, Insert, Retirement:**
+- Same pattern as Street Plates: auto-fills to 1 on check, `−` / `+` buttons + editable input
+- Label changed from `Qty` to `Quantity:`
+- `CheckboxWithQty` component updated to include the stepper UI
+
+**LeakReportForm conversion note:** The component was converted from an implicit arrow `=> (...)` to a block body `=> { return (...) }` to allow `useState` hooks inside it. The picker modal must be placed INSIDE the outer `<div className="space-y-6">`, not as a sibling, to avoid invalid JSX.
+
+### Remove User (Admin)
+
+Admins can delete user accounts from the Users tab.
+
+**Cleanup on delete:**
+- **Foreman**: removes all `crew_members` rows for the crew, unassigns all equipment (sets `crew_id = null`), clears `foreman_id` and `foreman_user_id` from the crew
+- **Supervisor**: clears `supervisor_id` from all crews they supervised
+- Then deletes the `profiles` row
+
+**UI:**
+- Trash icon button on each user row (hidden for the currently logged-in user)
+- Confirmation modal with role-specific warning text
+- `confirmDeleteUser` state holds the user pending deletion
+- `handleDeleteUser()` runs the cleanup sequence then deletes the profile
+
+### Upload to Auto-Fill on Submit New Job
+
+Foremen, supervisors, and admins can upload a PDF or photo of a job sheet on the Submit New Job form. Claude AI extracts the address and leak number and pre-fills the form.
+
+**Flow:**
+1. User clicks "Upload PDF or Photo" — triggers file input (image/* or .pdf)
+2. Images are compressed to max 1200px via Canvas API before upload
+3. File is sent as `multipart/form-data` to the `extract-job-info` Supabase Edge Function
+4. Edge function calls `claude-haiku-4-5-20251001` with the file as a document/image content block
+5. Claude returns a JSON array of all job sheets found: `[{street, city, leak_number}]`
+6. Address is formatted as `"Street Address - City, TX"`
+
+**Single job found:**
+- Form auto-fills address and leak #
+- Amber prompt appears asking user to enter FCC name before submitting
+- FCC field gets amber ring + "⚠ Required" label
+
+**Multiple jobs found (bulk forms):**
+- A "Extracted Jobs — N found" card appears above the normal single-submit form
+- One pre-filled form card per extracted job, scrollable
+- Each card: Job Type selector, Address, FCC (highlighted amber when empty), Leak #, Project #
+- "Submit All (N remaining)" button submits all at once sequentially
+- Per-card "Submit This Job" button for individual submission
+- Per-card "Remove" button to drop a job before submitting
+- For admins: single "Sequence (applies to all)" selector above all cards
+- Cards collapse to green "✓ Submitted: [address]" after submission
+- "Done" button appears when all are submitted; X button cancels at any time
+- `bulkForms` state: array of `{ id, job_type, address, fcc, leak_number, project_number, submitting, submitted, error }`
+- `updateBulkForm(id, field, value)` — updates a single field on one card
+- `handleBulkSubmitOne(formData)` — submits one card, marks it submitted or sets error
+- `handleSubmitAll()` — iterates pending cards and awaits each submission
+
+**Nav rename:** "Submit Job" renamed to "Submit New Job" for foreman and supervisor roles.
+
+### Edge Function: extract-job-info
+
+Supabase Edge Function (Deno) that accepts a PDF or image and returns extracted job info.
+
+**Location:** `supabase/functions/extract-job-info/index.ts`
+
+**Key details:**
+- Deployed with `--no-verify-jwt` — no Authorization header required from the client
+- Base64 encoding uses 8192-byte chunks to avoid call stack overflow on large PDFs
+- Prompt asks Claude to return ALL job sheets as a JSON array (handles multi-page PDFs)
+- `max_tokens: 1024` to accommodate multi-job responses
+- Address assembled as `"${street} - ${city}, TX"` (or just street/city if one is missing)
+- Model: `claude-haiku-4-5-20251001`
+
+**Deploy command:**
+```bash
+/tmp/supabase.exe functions deploy extract-job-info --project-ref jkghcufbigixfpnnfcet --no-verify-jwt
+```
+
+**IMPORTANT:** Always include `--no-verify-jwt` when redeploying. Without it, the function requires a JWT and the browser fetch (which sends no Authorization header) will get a 401 causing a CORS failure ("Failed to fetch").
+
+**Supabase CLI:** The CLI binary is at `/tmp/supabase.exe` (downloaded directly from GitHub releases — not installed via npm or winget).
