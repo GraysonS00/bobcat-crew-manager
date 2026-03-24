@@ -5520,8 +5520,26 @@ export default function App() {
     setLoading(false)
   }
 
+  const fetchAllJobList = async () => {
+    const pageSize = 1000
+    let all = []
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('job_list')
+        .select('*')
+        .order('job_number')
+        .range(from, from + pageSize - 1)
+      if (error || !data || data.length === 0) break
+      all = [...all, ...data]
+      if (data.length < pageSize) break
+      from += pageSize
+    }
+    return all
+  }
+
   const fetchAllData = async () => {
-    const [empRes, crewRes, equipRes, reportRes, profRes, logsRes, jobSubRes, seqRes, seqAssignRes, jobListRes] = await Promise.all([
+    const [empRes, crewRes, equipRes, reportRes, profRes, logsRes, jobSubRes, seqRes, seqAssignRes, allJobList] = await Promise.all([
       supabase.from('employees').select('*').order('name'),
       supabase.from('crews').select('*, crew_members(*)').order('name'),
       supabase.from('equipment').select('*').order('created_at', { ascending: false }),
@@ -5531,7 +5549,7 @@ export default function App() {
       supabase.from('job_submissions').select('*').order('created_at', { ascending: false }),
       supabase.from('job_number_sequences').select('*').order('prefix'),
       supabase.from('supervisor_sequence_assignments').select('*'),
-      supabase.from('job_list').select('*').order('job_number').limit(10000),
+      fetchAllJobList(),
     ])
     setEmployees(empRes.data || [])
     setCrews(crewRes.data || [])
@@ -5542,7 +5560,7 @@ export default function App() {
     setJobSubmissions(jobSubRes.data || [])
     setJobSequences(seqRes.data || [])
     setSequenceAssignments(seqAssignRes.data || [])
-    setJobList(jobListRes.data || [])
+    setJobList(allJobList)
   }
 
   const logActivity = async (action, entityType, entityId, entityName, details = null) => {
