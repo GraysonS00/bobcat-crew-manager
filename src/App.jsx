@@ -668,10 +668,19 @@ const UsersManagementView = ({ profiles, crews, employees, onRefresh, logActivit
     setError('')
     const user = confirmDeleteUser
 
-    // Clear crew assignments for this user
     if (user.role === 'foreman') {
-      await supabase.from('crews').update({ foreman_user_id: null, foreman_id: null }).eq('foreman_user_id', user.id)
+      // Find crews this foreman leads
+      const foremanCrews = crews.filter(c => c.foreman_user_id === user.id)
+      for (const crew of foremanCrews) {
+        // Remove all crew members
+        await supabase.from('crew_members').delete().eq('crew_id', crew.id)
+        // Unassign all equipment from this crew
+        await supabase.from('equipment').update({ crew_id: null }).eq('crew_id', crew.id)
+        // Clear foreman from crew
+        await supabase.from('crews').update({ foreman_user_id: null, foreman_id: null }).eq('id', crew.id)
+      }
     }
+
     if (user.role === 'supervisor') {
       await supabase.from('crews').update({ supervisor_id: null }).eq('supervisor_id', user.id)
     }
@@ -921,7 +930,13 @@ const UsersManagementView = ({ profiles, crews, employees, onRefresh, logActivit
             </div>
             {error && <p className="text-red-400 text-sm bg-red-900/20 border border-red-800 rounded-lg px-3 py-2 mb-4">{error}</p>}
             <p className="text-zinc-300 mb-2">Are you sure you want to remove <span className="font-semibold text-zinc-100">{confirmDeleteUser.name}</span>?</p>
-            <p className="text-zinc-500 text-sm mb-6">This will revoke their app access immediately. Any reports they submitted will be preserved.</p>
+            <p className="text-zinc-500 text-sm mb-2">This will revoke their app access immediately.</p>
+            {confirmDeleteUser.role === 'foreman' && (
+              <p className="text-amber-400/80 text-sm mb-2">Their crew members and equipment will be unassigned. Reports they submitted will be preserved.</p>
+            )}
+            {confirmDeleteUser.role === 'supervisor' && (
+              <p className="text-amber-400/80 text-sm mb-2">Their crews will have their supervisor cleared. Reports will be preserved.</p>
+            )}
             <div className="flex gap-3">
               <Button variant="secondary" onClick={() => { setConfirmDeleteUser(null); setError('') }} className="flex-1">Cancel</Button>
               <Button onClick={handleDeleteUser} loading={loading} className="flex-1 bg-red-600 hover:bg-red-500 text-white border-red-600">Remove User</Button>
