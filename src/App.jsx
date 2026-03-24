@@ -539,9 +539,11 @@ const Navigation = ({ currentView, setCurrentView, profile, onLogout }) => {
 // =============================================
 
 const UsersManagementView = ({ profiles, crews, employees, onRefresh, logActivity }) => {
+  const { profile: currentUser } = useAuth()
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
   const [showCrewAssignment, setShowCrewAssignment] = useState(null)
+  const [confirmDeleteUser, setConfirmDeleteUser] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -660,6 +662,34 @@ const UsersManagementView = ({ profiles, crews, employees, onRefresh, logActivit
     setLoading(false)
   }
 
+  const handleDeleteUser = async () => {
+    if (!confirmDeleteUser) return
+    setLoading(true)
+    setError('')
+    const user = confirmDeleteUser
+
+    // Clear crew assignments for this user
+    if (user.role === 'foreman') {
+      await supabase.from('crews').update({ foreman_user_id: null, foreman_id: null }).eq('foreman_user_id', user.id)
+    }
+    if (user.role === 'supervisor') {
+      await supabase.from('crews').update({ supervisor_id: null }).eq('supervisor_id', user.id)
+    }
+
+    const { error: deleteError } = await supabase.from('profiles').delete().eq('id', user.id)
+
+    if (deleteError) {
+      setError('Failed to remove user: ' + deleteError.message)
+    } else {
+      if (logActivity) {
+        await logActivity('deleted', 'user', user.id, user.name)
+      }
+      setConfirmDeleteUser(null)
+      onRefresh()
+    }
+    setLoading(false)
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -735,9 +765,16 @@ const UsersManagementView = ({ profiles, crews, employees, onRefresh, logActivit
                   </td>
                   <td className="py-3 px-4 text-zinc-400">{user.phone || '-'}</td>
                   <td className="py-3 px-4 text-right">
-                    <Button variant="ghost" size="sm" onClick={() => setEditingUser(user)}>
-                      <Icons.Edit />
-                    </Button>
+                    <div className="flex items-center justify-end gap-2">
+                      <Button variant="ghost" size="sm" onClick={() => setEditingUser(user)}>
+                        <Icons.Edit />
+                      </Button>
+                      {user.id !== currentUser?.id && (
+                        <Button variant="ghost" size="sm" onClick={() => setConfirmDeleteUser(user)} className="text-red-400 hover:text-red-300 hover:bg-red-900/20">
+                          <Icons.Trash />
+                        </Button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -869,6 +906,25 @@ const UsersManagementView = ({ profiles, crews, employees, onRefresh, logActivit
                   Save Changes
                 </Button>
               </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Delete User Confirmation Modal */}
+      {confirmDeleteUser && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-zinc-100">Remove User</h2>
+              <button onClick={() => setConfirmDeleteUser(null)} className="text-zinc-400 hover:text-zinc-200"><Icons.X /></button>
+            </div>
+            {error && <p className="text-red-400 text-sm bg-red-900/20 border border-red-800 rounded-lg px-3 py-2 mb-4">{error}</p>}
+            <p className="text-zinc-300 mb-2">Are you sure you want to remove <span className="font-semibold text-zinc-100">{confirmDeleteUser.name}</span>?</p>
+            <p className="text-zinc-500 text-sm mb-6">This will revoke their app access immediately. Any reports they submitted will be preserved.</p>
+            <div className="flex gap-3">
+              <Button variant="secondary" onClick={() => { setConfirmDeleteUser(null); setError('') }} className="flex-1">Cancel</Button>
+              <Button onClick={handleDeleteUser} loading={loading} className="flex-1 bg-red-600 hover:bg-red-500 text-white border-red-600">Remove User</Button>
             </div>
           </Card>
         </div>
