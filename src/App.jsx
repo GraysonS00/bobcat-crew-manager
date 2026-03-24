@@ -4384,6 +4384,9 @@ const JOB_TYPES = [
   { value: 'copper_service', label: 'Copper Service' },
   { value: 'per_foot', label: 'Per Foot' },
   { value: 'bid', label: 'BID' },
+  { value: 'cathodic_protection', label: 'Cathodic Protection' },
+  { value: 'welder_only', label: 'Welder Only' },
+  { value: 'vactruck_only', label: 'VacTruck Only' },
 ]
 
 const JOB_TYPE_PREFIXES = {
@@ -4392,6 +4395,9 @@ const JOB_TYPE_PREFIXES = {
   copper_service: 'CSVP - ',
   per_foot: 'Per Foot - ',
   bid: 'BID - ',
+  cathodic_protection: 'CP - ',
+  welder_only: 'WRO - ',
+  vactruck_only: 'VT - ',
 }
 
 const getJobTypeLabel = (value) => JOB_TYPES.find(t => t.value === value)?.label || value
