@@ -3049,9 +3049,22 @@ const LeakReportForm = ({ formData, updateForm, addDowntimePeriod, updateDowntim
         <YesNoToggle label="Increased Traffic control?" value={formData.increased_traffic_control} onChange={(v) => updateForm('increased_traffic_control', v)} disabled={disabled} />
         <YesNoToggle label="Rock in Bellhole?" value={formData.rock_in_bellhole} onChange={(v) => updateForm('rock_in_bellhole', v)} disabled={disabled} />
         <div className="space-y-2">
-          <YesNoToggle label="Street Plates Used?" value={formData.street_plates_used} onChange={(v) => updateForm('street_plates_used', v)} disabled={disabled} />
+          <YesNoToggle label="Street Plates Used?" value={formData.street_plates_used} onChange={(v) => { updateForm('street_plates_used', v); if (v === true) updateForm('street_plates_qty', 1) }} disabled={disabled} />
           {formData.street_plates_used === true && (
-            <Input label="Street Plates Qty" type="number" value={formData.street_plates_qty ?? ''} onChange={(e) => updateForm('street_plates_qty', e.target.value ? parseInt(e.target.value) : null)} placeholder="Quantity" disabled={disabled} />
+            <div>
+              <label className="block text-sm font-medium text-zinc-300 mb-1">Street Plates Qty</label>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => updateForm('street_plates_qty', Math.max(0, (formData.street_plates_qty || 0) - 1))} disabled={disabled} className="w-9 h-9 flex items-center justify-center bg-zinc-700 hover:bg-zinc-600 text-zinc-100 rounded-lg text-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed">−</button>
+                <input
+                  type="number"
+                  value={formData.street_plates_qty ?? ''}
+                  onChange={(e) => updateForm('street_plates_qty', e.target.value === '' ? null : parseInt(e.target.value))}
+                  disabled={disabled}
+                  className="w-20 text-center bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 focus:outline-none focus:border-amber-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                />
+                <button type="button" onClick={() => updateForm('street_plates_qty', (formData.street_plates_qty || 0) + 1)} disabled={disabled} className="w-9 h-9 flex items-center justify-center bg-zinc-700 hover:bg-zinc-600 text-zinc-100 rounded-lg text-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed">+</button>
+              </div>
+            </div>
           )}
         </div>
         <YesNoToggle label="Vac Truck Used?" value={formData.vac_truck_used} onChange={(v) => updateForm('vac_truck_used', v)} disabled={disabled} />
