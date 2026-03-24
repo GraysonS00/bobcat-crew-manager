@@ -4797,6 +4797,9 @@ const SubmitJobView = ({ profile, crews, jobSubmissions, jobSequences, sequenceA
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState('')
   const [error, setError] = useState('')
+  const [extracting, setExtracting] = useState(false)
+  const [extractError, setExtractError] = useState('')
+  const [fccPrompt, setFccPrompt] = useState(false)
 
   const isForeman = profile?.role === 'foreman'
   const isSupervisor = profile?.role === 'supervisor'
@@ -4804,6 +4807,57 @@ const SubmitJobView = ({ profile, crews, jobSubmissions, jobSequences, sequenceA
   const [selectedSequenceId, setSelectedSequenceId] = useState('')
   const [showJobPicker, setShowJobPicker] = useState(false)
   const [pickerSearch, setPickerSearch] = useState('')
+
+  const compressImage = (file) => new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      const MAX = 1200
+      let { width, height } = img
+      if (width > MAX || height > MAX) {
+        if (width > height) { height = Math.round(height * MAX / width); width = MAX }
+        else { width = Math.round(width * MAX / height); height = MAX }
+      }
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height)
+      canvas.toBlob(resolve, 'image/jpeg', 0.85)
+    }
+    img.src = URL.createObjectURL(file)
+  })
+
+  const handleFileExtract = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setExtracting(true)
+    setExtractError('')
+    setFccPrompt(false)
+    try {
+      let fileToSend = file
+      if (file.type.startsWith('image/')) {
+        fileToSend = await compressImage(file)
+        fileToSend = new File([fileToSend], file.name, { type: 'image/jpeg' })
+      }
+      const body = new FormData()
+      body.append('file', fileToSend)
+      const res = await fetch('https://jkghcufbigixfpnnfcet.supabase.co/functions/v1/extract-job-info', {
+        method: 'POST',
+        body,
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error || 'Extraction failed')
+      setFormData(prev => ({
+        ...prev,
+        address: data.address || prev.address,
+        leak_number: data.leak_number || prev.leak_number,
+      }))
+      setFccPrompt(true)
+    } catch (err) {
+      setExtractError('Could not extract info: ' + err.message)
+    }
+    setExtracting(false)
+    e.target.value = ''
+  }
 
   const getPickerScore = (job, q) => {
     const query = q.toLowerCase()
@@ -4959,6 +5013,24 @@ const SubmitJobView = ({ profile, crews, jobSubmissions, jobSequences, sequenceA
         {error && <p className="text-red-400 text-sm bg-red-900/20 border border-red-800 rounded-lg px-3 py-2 mb-4">{error}</p>}
         {success && <p className="text-emerald-400 text-sm bg-emerald-900/20 border border-emerald-800 rounded-lg px-3 py-2 mb-4">{success}</p>}
 
+        {/* Upload to auto-fill */}
+        <div className="mb-4">
+          <p className="text-sm text-zinc-400 mb-2">Have a job sheet or screenshot? Upload it to auto-fill the address and leak #.</p>
+          <label className="cursor-pointer">
+            <input type="file" accept="image/*,.pdf" className="hidden" onChange={handleFileExtract} disabled={extracting} />
+            <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${extracting ? 'border-zinc-700 text-zinc-500 cursor-not-allowed' : 'border-zinc-600 text-zinc-300 hover:border-amber-500 hover:text-amber-400 cursor-pointer'}`}>
+              <Icons.Upload /> {extracting ? 'Extracting...' : 'Upload PDF or Photo'}
+            </span>
+          </label>
+          {extracting && <p className="text-zinc-500 text-xs mt-2">Reading document, this may take a few seconds...</p>}
+          {extractError && <p className="text-red-400 text-xs mt-2">{extractError}</p>}
+          {fccPrompt && !extractError && (
+            <p className="text-amber-400 text-sm mt-2 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
+              Address and leak # filled in — please enter the FCC name below before submitting.
+            </p>
+          )}
+        </div>
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <Select
             label="Job Type"
@@ -5008,12 +5080,14 @@ const SubmitJobView = ({ profile, crews, jobSubmissions, jobSequences, sequenceA
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Input
-              label="FCC (optional)"
-              value={formData.fcc}
-              onChange={(e) => setFormData({ ...formData, fcc: e.target.value })}
-              placeholder="FCC"
-            />
+            <div className={fccPrompt ? 'rounded-lg ring-2 ring-amber-500/60 p-1 -m-1' : ''}>
+              <Input
+                label={fccPrompt ? 'FCC ⚠ Required' : 'FCC (optional)'}
+                value={formData.fcc}
+                onChange={(e) => { setFormData({ ...formData, fcc: e.target.value }); if (e.target.value) setFccPrompt(false) }}
+                placeholder="Enter FCC name"
+              />
+            </div>
             <Input
               label="Leak # (optional)"
               value={formData.leak_number}
