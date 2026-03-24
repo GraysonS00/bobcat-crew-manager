@@ -22,7 +22,13 @@ Deno.serve(async (req) => {
     }
 
     const bytes = await file.arrayBuffer()
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(bytes)))
+    const uint8 = new Uint8Array(bytes)
+    let binary = ''
+    const chunk = 8192
+    for (let i = 0; i < uint8.length; i += chunk) {
+      binary += String.fromCharCode(...uint8.subarray(i, i + chunk))
+    }
+    const base64 = btoa(binary)
     const mimeType = file.type || 'application/octet-stream'
 
     const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') })
