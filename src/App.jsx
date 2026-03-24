@@ -2915,7 +2915,49 @@ const EquipmentView = ({ equipment, crews, employees, profiles, profile, onRefre
 // LEAK REPORT FORM COMPONENT
 // =============================================
 
-const LeakReportForm = ({ formData, updateForm, addDowntimePeriod, updateDowntimePeriod, removeDowntimePeriod, disabled = false }) => (
+const LeakReportForm = ({ formData, updateForm, addDowntimePeriod, updateDowntimePeriod, removeDowntimePeriod, disabled = false, jobList = [] }) => {
+  const [showPicker, setShowPicker] = useState(false)
+  const [pickerSearch, setPickerSearch] = useState('')
+
+  const getPickerScore = (job, q) => {
+    const query = q.toLowerCase()
+    const desc = (job.job_desc || '').toLowerCase()
+    const num = (job.job_number || '').toLowerCase()
+    const contract = (job.contract || '').toLowerCase()
+    const contact = (job.contact || '').toLowerCase()
+    const afe = (job.afe || '').toLowerCase()
+    if (num === query || desc === query) return 100
+    if (num.startsWith(query) || desc.startsWith(query)) return 80
+    if (num.includes(query) || desc.includes(query)) return 60
+    if (contract.includes(query) || contact.includes(query) || afe.includes(query)) return 40
+    let idx = 0
+    for (const ch of query) {
+      const found = desc.indexOf(ch, idx)
+      if (found === -1) return 0
+      idx = found + 1
+    }
+    return 10
+  }
+
+  const pickerResults = pickerSearch.trim().length < 2
+    ? []
+    : jobList
+        .map(job => ({ job, score: getPickerScore(job, pickerSearch.trim()) }))
+        .filter(({ score }) => score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 50)
+        .map(({ job }) => job)
+
+  const selectJob = (job) => {
+    updateForm('address', job.job_desc || '')
+    updateForm('project_number', job.contract || '')
+    updateForm('leak_number', job.afe || '')
+    updateForm('fcc_name', job.contact || '')
+    setShowPicker(false)
+    setPickerSearch('')
+  }
+
+  return (
   <div className="space-y-6">
     <div className="space-y-4">
       <h3 className="text-lg font-semibold text-amber-400 border-b border-zinc-800 pb-2">Basic Information</h3>
@@ -2925,7 +2967,23 @@ const LeakReportForm = ({ formData, updateForm, addDowntimePeriod, updateDowntim
         <Input label="Project #" value={formData.project_number} onChange={(e) => updateForm('project_number', e.target.value)} disabled={disabled} />
         <Input label="Leak #" value={formData.leak_number} onChange={(e) => updateForm('leak_number', e.target.value)} disabled={disabled} />
       </div>
-      <Input label="Address" value={formData.address} onChange={(e) => updateForm('address', e.target.value)} placeholder="Full address" disabled={disabled} />
+      <div className="space-y-1">
+        <div className="flex items-center justify-between">
+          <label className="block text-sm font-medium text-zinc-300">Address</label>
+          {!disabled && jobList.length > 0 && (
+            <button type="button" onClick={() => setShowPicker(true)} className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1">
+              <Icons.Search /> Pick from Job List
+            </button>
+          )}
+        </div>
+        <input
+          className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          value={formData.address}
+          onChange={(e) => updateForm('address', e.target.value)}
+          placeholder="Full address"
+          disabled={disabled}
+        />
+      </div>
     </div>
 
     <div className="space-y-4">
@@ -3080,14 +3138,58 @@ const LeakReportForm = ({ formData, updateForm, addDowntimePeriod, updateDowntim
       <h3 className="text-lg font-semibold text-amber-400 border-b border-zinc-800 pb-2">Notes</h3>
       <Textarea value={formData.notes} onChange={(e) => updateForm('notes', e.target.value)} placeholder="Additional notes..." rows={4} disabled={disabled} />
     </div>
+
+    {showPicker && (
+      <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+        <div className="bg-zinc-900 border border-zinc-700 rounded-xl w-full max-w-lg flex flex-col max-h-[80vh]">
+          <div className="flex items-center justify-between p-4 border-b border-zinc-800">
+            <h2 className="text-lg font-semibold text-zinc-100">Pick from Job List</h2>
+            <button onClick={() => { setShowPicker(false); setPickerSearch('') }} className="text-zinc-400 hover:text-zinc-200"><Icons.X /></button>
+          </div>
+          <div className="p-4 border-b border-zinc-800">
+            <div className="relative">
+              <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-zinc-400"><Icons.Search /></div>
+              <input
+                autoFocus
+                type="text"
+                placeholder="Search job description, job #, project #..."
+                value={pickerSearch}
+                onChange={e => setPickerSearch(e.target.value)}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg pl-10 pr-4 py-2.5 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500"
+              />
+            </div>
+          </div>
+          <div className="overflow-y-auto flex-1 p-2">
+            {pickerSearch.trim().length < 2 && (
+              <p className="text-zinc-500 text-sm text-center py-8">Type at least 2 characters to search...</p>
+            )}
+            {pickerSearch.trim().length >= 2 && pickerResults.length === 0 && (
+              <p className="text-zinc-500 text-sm text-center py-8">No jobs match "{pickerSearch}"</p>
+            )}
+            {pickerResults.map(job => (
+              <button key={job.id} onClick={() => selectJob(job)} className="w-full text-left p-3 rounded-lg hover:bg-zinc-800 transition-colors">
+                <p className="font-medium text-zinc-100 text-sm">{job.job_desc}</p>
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 text-xs text-zinc-400">
+                  <span className="text-amber-400 font-mono">{job.job_number}</span>
+                  {job.contract && <span>Project #: {job.contract}</span>}
+                  {job.afe && <span>Leak #: {job.afe}</span>}
+                  {job.contact && <span>FCC: {job.contact}</span>}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    )}
   </div>
-)
+  )
+}
 
 // =============================================
 // FOREMAN LEAK REPORTS VIEW
 // =============================================
 
-const ForemanLeakReportsView = ({ leakReports, crews, profile, onRefresh, logActivity }) => {
+const ForemanLeakReportsView = ({ leakReports, crews, profile, onRefresh, logActivity, jobList = [] }) => {
   const [showAddModal, setShowAddModal] = useState(false)
   const [viewingReport, setViewingReport] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -3192,7 +3294,7 @@ const ForemanLeakReportsView = ({ leakReports, crews, profile, onRefresh, logAct
               <h2 className="text-xl font-bold text-zinc-100">New Leak Report</h2>
               <button onClick={() => setShowAddModal(false)} className="text-zinc-400 hover:text-zinc-200"><Icons.X /></button>
             </div>
-            <LeakReportForm formData={formData} updateForm={updateForm} addDowntimePeriod={addDowntimePeriod} updateDowntimePeriod={updateDowntimePeriod} removeDowntimePeriod={removeDowntimePeriod} />
+            <LeakReportForm formData={formData} updateForm={updateForm} addDowntimePeriod={addDowntimePeriod} updateDowntimePeriod={updateDowntimePeriod} removeDowntimePeriod={removeDowntimePeriod} jobList={jobList} />
             <div className="flex gap-3 pt-4 border-t border-zinc-800 sticky bottom-0 bg-zinc-900 py-4 -mb-5">
               <Button variant="secondary" onClick={() => setShowAddModal(false)} className="flex-1">Cancel</Button>
               <Button onClick={handleSubmit} loading={loading} className="flex-1">Submit Report</Button>
@@ -3233,7 +3335,7 @@ const ForemanLeakReportsView = ({ leakReports, crews, profile, onRefresh, logAct
 // SUPERVISOR REVIEW VIEW
 // =============================================
 
-const SupervisorReviewView = ({ leakReports, crews, profile, onRefresh, logActivity }) => {
+const SupervisorReviewView = ({ leakReports, crews, profile, onRefresh, logActivity, jobList = [] }) => {
   const [activeTab, setActiveTab] = useState('pending')
   const [reviewingReport, setReviewingReport] = useState(null)
   const [editMode, setEditMode] = useState(false)
@@ -3350,7 +3452,7 @@ const SupervisorReviewView = ({ leakReports, crews, profile, onRefresh, logActiv
               </div>
             </div>
 
-            <LeakReportForm formData={formData} updateForm={updateForm} addDowntimePeriod={addDowntimePeriod} updateDowntimePeriod={updateDowntimePeriod} removeDowntimePeriod={removeDowntimePeriod} disabled={!editMode} />
+            <LeakReportForm formData={formData} updateForm={updateForm} addDowntimePeriod={addDowntimePeriod} updateDowntimePeriod={updateDowntimePeriod} removeDowntimePeriod={removeDowntimePeriod} disabled={!editMode} jobList={jobList} />
 
             <div className="space-y-4 mt-6 pt-6 border-t-2 border-amber-500/50">
               <h3 className="text-lg font-semibold text-amber-400">Supervisor Classification</h3>
@@ -3759,7 +3861,7 @@ const exportReportsAsZip = async (reports, crews, profiles, employees) => {
 // ADMIN LEAK REPORTS VIEW
 // =============================================
 
-const AdminLeakReportsView = ({ leakReports, crews, profiles, onRefresh, employees, logActivity }) => {
+const AdminLeakReportsView = ({ leakReports, crews, profiles, onRefresh, employees, logActivity, jobList = [] }) => {
   const [activeSupervisor, setActiveSupervisor] = useState('all')
   const [activeWeek, setActiveWeek] = useState('all')
   const [viewingReport, setViewingReport] = useState(null)
@@ -4024,7 +4126,7 @@ const AdminLeakReportsView = ({ leakReports, crews, profiles, onRefresh, employe
               {viewingReport.rate_type && <Badge variant={viewingReport.rate_type === 'all_hourly' ? 'info' : viewingReport.rate_type === 'unit_rates' ? 'purple' : 'default'}>{viewingReport.rate_type === 'all_hourly' ? 'Hourly' : viewingReport.rate_type === 'unit_rates' ? 'Unit' : 'Both'}</Badge>}
             </div>
 
-            <LeakReportForm formData={formData} updateForm={updateForm} addDowntimePeriod={addDowntimePeriod} updateDowntimePeriod={updateDowntimePeriod} removeDowntimePeriod={removeDowntimePeriod} disabled={!editMode} />
+            <LeakReportForm formData={formData} updateForm={updateForm} addDowntimePeriod={addDowntimePeriod} updateDowntimePeriod={updateDowntimePeriod} removeDowntimePeriod={removeDowntimePeriod} disabled={!editMode} jobList={jobList} />
 
             <div className="space-y-4 mt-6 pt-6 border-t-2 border-amber-500/50">
               <h3 className="text-lg font-semibold text-amber-400">Classification</h3>
@@ -5596,9 +5698,9 @@ export default function App() {
       case 'employees': return <EmployeesView employees={employees} crews={crews} onRefresh={fetchAllData} readOnly={profile?.role !== 'admin'} logActivity={logActivity} />
       case 'crews': case 'my-crew': return <CrewsView crews={crews} employees={employees} profiles={profiles} profile={profile} onRefresh={fetchAllData} equipment={equipment} leakReports={leakReports} logActivity={logActivity} />
       case 'equipment': case 'my-equipment': return <EquipmentView equipment={equipment} crews={crews} employees={employees} profiles={profiles} profile={profile} onRefresh={fetchAllData} logActivity={logActivity} />
-      case 'leak-reports': return <AdminLeakReportsView leakReports={leakReports} crews={crews} profiles={profiles} onRefresh={fetchAllData} employees={employees} logActivity={logActivity} />
-      case 'my-leak-reports': return <ForemanLeakReportsView leakReports={leakReports} crews={crews} profile={profile} onRefresh={fetchAllData} logActivity={logActivity} />
-      case 'review-reports': return <SupervisorReviewView leakReports={leakReports} crews={crews} profile={profile} onRefresh={fetchAllData} logActivity={logActivity} />
+      case 'leak-reports': return <AdminLeakReportsView leakReports={leakReports} crews={crews} profiles={profiles} onRefresh={fetchAllData} employees={employees} logActivity={logActivity} jobList={jobList} />
+      case 'my-leak-reports': return <ForemanLeakReportsView leakReports={leakReports} crews={crews} profile={profile} onRefresh={fetchAllData} logActivity={logActivity} jobList={jobList} />
+      case 'review-reports': return <SupervisorReviewView leakReports={leakReports} crews={crews} profile={profile} onRefresh={fetchAllData} logActivity={logActivity} jobList={jobList} />
       case 'job-submissions': return <AdminJobSubmissionsView jobSubmissions={jobSubmissions} profiles={profiles} jobSequences={jobSequences} sequenceAssignments={sequenceAssignments} crews={crews} onRefresh={fetchAllData} logActivity={logActivity} />
       case 'job-settings': return <JobSettingsView jobSequences={jobSequences} sequenceAssignments={sequenceAssignments} profiles={profiles} onRefresh={fetchAllData} logActivity={logActivity} />
       case 'job-list': return <JobListView profile={profile} jobList={jobList} onRefresh={fetchAllData} logActivity={logActivity} />
