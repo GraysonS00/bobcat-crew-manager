@@ -68,7 +68,7 @@ If a field cannot be found for a sheet, use null for that field.`
     const parsed: Array<{ street?: string; city?: string; leak_number?: string }> = JSON.parse(jsonMatch[0])
 
     const jobs = parsed.map(item => ({
-      address: [item.street, item.city].filter(Boolean).join(', ') || null,
+      address: item.street && item.city ? `${item.street} - ${item.city}, TX` : (item.street || item.city || null),
       leak_number: item.leak_number ?? null,
     }))
 
