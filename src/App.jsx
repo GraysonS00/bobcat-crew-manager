@@ -4800,6 +4800,7 @@ const SubmitJobView = ({ profile, crews, jobSubmissions, jobSequences, sequenceA
   const [extracting, setExtracting] = useState(false)
   const [extractError, setExtractError] = useState('')
   const [fccPrompt, setFccPrompt] = useState(false)
+  const [extractedJobs, setExtractedJobs] = useState(null)
 
   const isForeman = profile?.role === 'foreman'
   const isSupervisor = profile?.role === 'supervisor'
@@ -4846,12 +4847,19 @@ const SubmitJobView = ({ profile, crews, jobSubmissions, jobSequences, sequenceA
       })
       const data = await res.json()
       if (!res.ok || data.error) throw new Error(data.error || 'Extraction failed')
-      setFormData(prev => ({
-        ...prev,
-        address: data.address || prev.address,
-        leak_number: data.leak_number || prev.leak_number,
-      }))
-      setFccPrompt(true)
+      const jobs = data.jobs || []
+      if (jobs.length === 1) {
+        setFormData(prev => ({
+          ...prev,
+          address: jobs[0].address || prev.address,
+          leak_number: jobs[0].leak_number || prev.leak_number,
+        }))
+        setFccPrompt(true)
+      } else if (jobs.length > 1) {
+        setExtractedJobs(jobs)
+      } else {
+        throw new Error('No job info found in this file')
+      }
     } catch (err) {
       setExtractError('Could not extract info: ' + err.message)
     }
@@ -5030,6 +5038,41 @@ const SubmitJobView = ({ profile, crews, jobSubmissions, jobSequences, sequenceA
             </p>
           )}
         </div>
+
+        {/* Multi-job picker modal */}
+        {extractedJobs && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+            <div className="bg-zinc-900 border border-zinc-700 rounded-xl w-full max-w-md flex flex-col max-h-[80vh]">
+              <div className="flex items-center justify-between p-4 border-b border-zinc-800">
+                <div>
+                  <h2 className="text-lg font-semibold text-zinc-100">Multiple Job Sheets Found</h2>
+                  <p className="text-sm text-zinc-500">{extractedJobs.length} jobs detected — select one to fill in</p>
+                </div>
+                <button onClick={() => setExtractedJobs(null)} className="text-zinc-400 hover:text-zinc-200"><Icons.X /></button>
+              </div>
+              <div className="overflow-y-auto flex-1 p-2">
+                {extractedJobs.map((job, i) => (
+                  <button
+                    key={i}
+                    onClick={() => {
+                      setFormData(prev => ({
+                        ...prev,
+                        address: job.address || prev.address,
+                        leak_number: job.leak_number || prev.leak_number,
+                      }))
+                      setExtractedJobs(null)
+                      setFccPrompt(true)
+                    }}
+                    className="w-full text-left p-3 rounded-lg hover:bg-zinc-800 transition-colors border border-transparent hover:border-zinc-700"
+                  >
+                    <p className="font-medium text-zinc-100 text-sm">{job.address || <span className="text-zinc-500 italic">No address found</span>}</p>
+                    {job.leak_number && <p className="text-xs text-amber-400 mt-0.5">Leak #: {job.leak_number}</p>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <Select

@@ -27,16 +27,16 @@ Deno.serve(async (req) => {
 
     const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') })
 
-    const prompt = `Extract the following from this document:
+    const prompt = `This document may contain one or more job sheets. For EACH job sheet found, extract:
 1. Street address (street number and name only, no city/town)
 2. Town or city name
 3. Leak number (the large work order or ticket number, often at the top of the form, or labeled "Leak #", "LIO #", or similar — NOT a survey job number)
 
-Return ONLY valid JSON in exactly this format, nothing else:
-{"street": "street address", "city": "town or city", "leak_number": "number"}
+Return ONLY a valid JSON array, one entry per job sheet, nothing else:
+[{"street": "street address", "city": "town or city", "leak_number": "number"}]
 
-Combine street and city into the address like: "3401 Forest Ln, Garland"
-If a field cannot be found, use null.`
+If only one job sheet, still return an array with one entry.
+If a field cannot be found for a sheet, use null for that field.`
 
     const isPDF = mimeType === 'application/pdf'
 
@@ -46,7 +46,7 @@ If a field cannot be found, use null.`
 
     const message = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 256,
+      max_tokens: 1024,
       messages: [
         {
           role: 'user',
@@ -56,14 +56,18 @@ If a field cannot be found, use null.`
     })
 
     const text = message.content[0].type === 'text' ? message.content[0].text : ''
-    const jsonMatch = text.match(/\{[\s\S]*\}/)
+    const jsonMatch = text.match(/\[[\s\S]*\]/)
     if (!jsonMatch) throw new Error('Could not parse extraction response')
 
-    const parsed = JSON.parse(jsonMatch[0])
-    const address = [parsed.street, parsed.city].filter(Boolean).join(', ') || null
+    const parsed: Array<{ street?: string; city?: string; leak_number?: string }> = JSON.parse(jsonMatch[0])
+
+    const jobs = parsed.map(item => ({
+      address: [item.street, item.city].filter(Boolean).join(', ') || null,
+      leak_number: item.leak_number ?? null,
+    }))
 
     return new Response(
-      JSON.stringify({ address, leak_number: parsed.leak_number ?? null }),
+      JSON.stringify({ jobs }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   } catch (err) {
