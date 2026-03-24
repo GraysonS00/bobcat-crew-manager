@@ -4451,12 +4451,12 @@ const JobListView = ({ profile, jobList, onRefresh, logActivity }) => {
   }
 
   const filteredJobs = searchQuery.trim().length < 2
-    ? jobList.slice(0, 50)
+    ? jobList
     : jobList
         .map(job => ({ job, score: getJobScore(job, searchQuery.trim()) }))
         .filter(({ score }) => score > 0)
         .sort((a, b) => b.score - a.score)
-        .slice(0, 100)
+        .slice(0, 200)
         .map(({ job }) => job)
 
   const handleFileUpload = async (e) => {
@@ -4580,9 +4580,6 @@ const JobListView = ({ profile, jobList, onRefresh, logActivity }) => {
           <div className="text-center py-12 text-zinc-500">
             {isAdmin ? 'No jobs loaded. Upload an .xlsx file to get started.' : 'No jobs available. Ask your admin to upload the job list.'}
           </div>
-        )}
-        {jobList.length > 0 && searchQuery.trim().length < 2 && (
-          <p className="text-center text-zinc-600 text-sm pt-2">Showing first 50 jobs. Search to find specific jobs.</p>
         )}
         {searchQuery.trim().length >= 2 && filteredJobs.length === 0 && (
           <p className="text-center text-zinc-500 py-8">No jobs match "{searchQuery}"</p>
@@ -5534,7 +5531,7 @@ export default function App() {
       supabase.from('job_submissions').select('*').order('created_at', { ascending: false }),
       supabase.from('job_number_sequences').select('*').order('prefix'),
       supabase.from('supervisor_sequence_assignments').select('*'),
-      supabase.from('job_list').select('*').order('job_number'),
+      supabase.from('job_list').select('*').order('job_number').limit(10000),
     ])
     setEmployees(empRes.data || [])
     setCrews(crewRes.data || [])
